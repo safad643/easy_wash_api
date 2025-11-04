@@ -3,6 +3,8 @@ const cookieParser = require('cookie-parser');
 const authRoutes = require('./routes/auth.routes');
 const productRoutes = require('./routes/product.routes');
 const cartRoutes = require('./routes/cart.routes');
+const addressRoutes = require('./routes/address.routes');
+const vehicleRoutes = require('./routes/vehicle.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const cors = require('cors');
 
@@ -25,6 +27,8 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);  
 app.use('/api/cart', cartRoutes);
+app.use('/api/addresses', addressRoutes);
+app.use('/api/vehicles', vehicleRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
