@@ -3,23 +3,24 @@ const { BadRequestError } = require('../utils/errors');
 
 const googleAuth = async (req, res, next) => {
   const { code } = req.body;
-  
   if (!code) {
     throw new BadRequestError('Authorization code is required');
   }
-  
+
   const { accessToken, refreshToken } = await authService.googleLogin(code);
-  
+
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
-  
-  res.json({ 
-    success: true, 
-    accessToken 
+
+  res.json({
+    success: true,
+    data: {
+      accessToken
+    }
   });
 };
 
@@ -39,24 +40,26 @@ const sendOTP = async (req, res, next) => {
 };
 
 const verifyOTP = async (req, res, next) => {
-  const { phone, otp } = req.body;
   
+  const { phone, otp } = req.body;
   if (!phone || !otp) {
     throw new BadRequestError('Phone and OTP are required');
   }
-  
+
   const { accessToken, refreshToken } = await authService.verifyPhoneOTP(phone, otp);
-  
+
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
-  
-  res.json({ 
-    success: true, 
-    accessToken 
+
+  res.json({
+    success: true,
+    data: {
+      accessToken
+    }
   });
 };
 
@@ -77,16 +80,18 @@ const refresh = async (req, res, next) => {
 
 const logout = async (req, res, next) => {
   const { refreshToken } = req.cookies;
-  
+
   if (refreshToken) {
     await authService.logout(refreshToken);
   }
-  
+
   res.clearCookie('refreshToken');
-  
-  res.json({ 
-    success: true, 
-    message: 'Logged out successfully' 
+
+  res.json({
+    success: true,
+    data: {
+      message: 'Logged out successfully'
+    }
   });
 };
 

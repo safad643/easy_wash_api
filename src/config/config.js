@@ -19,6 +19,8 @@ module.exports = {
   },
   sms: {
     apiKey: process.env.SMS_API_KEY,
+    templateId: process.env.SMS_TEMPLATE_ID,
     senderId: process.env.SMS_SENDER_ID
   }
+  
 };
