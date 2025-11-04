@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
+  // Auth identifiers
   googleId: {
     type: String,
     sparse: true,
@@ -16,6 +17,30 @@ const userSchema = new mongoose.Schema({
     type: String,
     sparse: true,
     unique: true
+  },
+
+  // Credentials
+  password: {
+    type: String,
+    select: false,
+  },
+
+  // Profile
+  name: {
+    type: String,
+    trim: true,
+  },
+  avatar: {
+    type: String,
+    trim: true,
+  },
+
+  // Authorization
+  role: {
+    type: String,
+    enum: ['customer', 'staff', 'admin'],
+    default: 'customer',
+    index: true,
   }
 }, {
   timestamps: true

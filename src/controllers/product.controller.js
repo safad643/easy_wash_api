@@ -13,10 +13,11 @@ const createProduct = async (req, res, next) => {
 const getProducts = async (req, res, next) => {
   const filters = {
     category: req.query.category,
+    brand: req.query.brand,
     search: req.query.search,
     minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
     maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
-    active: req.query.active ? req.query.active === 'true' : undefined,
+    isAvailable: typeof req.query.isAvailable !== 'undefined' ? req.query.isAvailable === 'true' : undefined,
     page: req.query.page || 1,
     limit: req.query.limit || 10,
     sortBy: req.query.sortBy || 'name',

@@ -1,9 +1,9 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
 
-const generateAccessToken = (userId) => {
+const generateAccessToken = (userId, role) => {
   return jwt.sign(
-    { userId },
+    { userId, role },
     config.jwt.accessSecret,
     { expiresIn: config.jwt.accessExpiresIn }
   );

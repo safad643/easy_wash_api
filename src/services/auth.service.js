@@ -7,6 +7,33 @@ const { generateAccessToken, generateRefreshToken } = require('../utils/jwt.util
 const { sendOTP } = require('../utils/sms.util');
 const { UnauthorizedError, BadRequestError } = require('../utils/errors');
 
+const loginWithCredentials = async ({ identifier, password }) => {
+  // identifier can be email or phone
+  if (!identifier || !password) {
+    throw new BadRequestError('Identifier and password are required');
+  }
+  const query = identifier.includes('@') ? { email: identifier } : { phone: identifier };
+  const user = await User.findOne(query).select('+password');
+  if (!user || !user.password) {
+    throw new UnauthorizedError('Invalid credentials');
+  }
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    throw new UnauthorizedError('Invalid credentials');
+  }
+
+  const accessToken = generateAccessToken(user._id, user.role);
+  const refreshToken = generateRefreshToken();
+
+  await RefreshToken.create({
+    userId: user._id,
+    token: await bcrypt.hash(refreshToken, 10),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  });
+
+  return { accessToken, refreshToken, user };
+};
+
 const googleLogin = async (authCode) => {
   try {
     const googleUser = await googleService.verifyAuthCode(authCode);
@@ -23,7 +50,7 @@ const googleLogin = async (authCode) => {
       });
     }
     
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.role);
     const refreshToken = generateRefreshToken();
     
     await RefreshToken.create({
@@ -32,7 +59,7 @@ const googleLogin = async (authCode) => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     });
     
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, user };
   } catch (error) {
     if (error.isOperational) throw error;
     throw new Error(`Google login failed: ${error.message}`);
@@ -91,7 +118,7 @@ const verifyPhoneOTP = async (phone, otpCode) => {
       user = await User.create({ phone });
     }
     
-    const accessToken = generateAccessToken(user._id);
+    const accessToken = generateAccessToken(user._id, user.role);
     const refreshToken = generateRefreshToken();
     
     await RefreshToken.create({
@@ -100,7 +127,7 @@ const verifyPhoneOTP = async (phone, otpCode) => {
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     });
     
-    return { accessToken, refreshToken };
+    return { accessToken, refreshToken, user };
   } catch (error) {
     if (error.isOperational) throw error;
     throw new Error(`OTP verification failed: ${error.message}`);
@@ -109,9 +136,16 @@ const verifyPhoneOTP = async (phone, otpCode) => {
 
 const refreshAccessToken = async (refreshToken) => {
   try {
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-    
-    const tokenRecord = await RefreshToken.findOne({ token: hashedToken });
+    // Find refresh token by scanning and comparing hashes (bcrypt is salted)
+    const tokenRecords = await RefreshToken.find({});
+    let tokenRecord = null;
+    for (const rec of tokenRecords) {
+      const match = await bcrypt.compare(refreshToken, rec.token);
+      if (match) {
+        tokenRecord = rec;
+        break;
+      }
+    }
     
     if (!tokenRecord) {
       throw new UnauthorizedError('Invalid refresh token');
@@ -122,9 +156,13 @@ const refreshAccessToken = async (refreshToken) => {
       throw new UnauthorizedError('Refresh token expired');
     }
     
-    const accessToken = generateAccessToken(tokenRecord.userId);
+    const user = await User.findById(tokenRecord.userId);
+    if (!user) {
+      throw new UnauthorizedError('User no longer exists');
+    }
+    const accessToken = generateAccessToken(user._id, user.role);
     
-    return { accessToken };
+    return { accessToken, user };
   } catch (error) {
     if (error.isOperational) throw error;
     throw new Error(`Token refresh failed: ${error.message}`);
@@ -133,12 +171,45 @@ const refreshAccessToken = async (refreshToken) => {
 
 const logout = async (refreshToken) => {
   try {
-    const hashedToken = await bcrypt.hash(refreshToken, 10);
-    await RefreshToken.deleteOne({ token: hashedToken });
+    // Delete matching refresh token
+    const tokenRecords = await RefreshToken.find({});
+    for (const rec of tokenRecords) {
+      const match = await bcrypt.compare(refreshToken, rec.token);
+      if (match) {
+        await RefreshToken.deleteOne({ _id: rec._id });
+        break;
+      }
+    }
     return { message: 'Logged out successfully' };
   } catch (error) {
     throw new Error(`Logout failed: ${error.message}`);
   }
+};
+
+const registerUser = async ({ phone, name, email, password }) => {
+  if (!phone || !password || !name) {
+    throw new BadRequestError('Name, phone and password are required');
+  }
+  const existing = await User.findOne({ $or: [{ phone }, { email }] });
+  if (existing) {
+    throw new BadRequestError('User already exists with provided phone/email');
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await User.create({ phone, name, email, password: passwordHash, role: 'customer' });
+  const accessToken = generateAccessToken(user._id, user.role);
+  const refreshToken = generateRefreshToken();
+  await RefreshToken.create({
+    userId: user._id,
+    token: await bcrypt.hash(refreshToken, 10),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  });
+  return { accessToken, refreshToken, user };
+};
+
+const getUserById = async (userId) => {
+  const user = await User.findById(userId);
+  if (!user) throw new UnauthorizedError('User not found');
+  return user;
 };
 
 module.exports = {
@@ -146,5 +217,8 @@ module.exports = {
   sendPhoneOTP,
   verifyPhoneOTP,
   refreshAccessToken,
-  logout
+  logout,
+  registerUser,
+  getUserById,
+  loginWithCredentials
 };

@@ -16,10 +16,11 @@ class ProductService {
   async getProducts(filters = {}) {
     const {
       category,
+      brand,
       search,
       minPrice,
       maxPrice,
-      active,
+      isAvailable,
       page = 1,
       limit = 10,
       sortBy = 'name',
@@ -29,7 +30,8 @@ class ProductService {
     const query = {};
 
     if (category) query.category = category;
-    if (active !== undefined) query.active = active;
+    if (brand) query.brand = brand;
+    if (isAvailable !== undefined) query.isAvailable = isAvailable;
 
     if (search) {
       query.$text = { $search: search };
@@ -42,7 +44,9 @@ class ProductService {
     }
 
     const sort = {};
-    sort[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    const allowedSort = ['name', 'price', 'rating'];
+    const sortField = allowedSort.includes(sortBy) ? sortBy : 'name';
+    sort[sortField] = sortOrder === 'asc' ? 1 : -1;
 
     const skip = (page - 1) * limit;
 

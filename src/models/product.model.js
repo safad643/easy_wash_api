@@ -15,6 +15,10 @@ const productSchema = new mongoose.Schema(
       minlength: [10, 'Description must be at least 10 characters'],
       maxlength: [1000, 'Description must not exceed 1000 characters'],
     },
+    brand: {
+      type: String,
+      trim: true,
+    },
     category: {
       type: String,
       required: [true, 'Category is required'],
@@ -43,17 +47,15 @@ const productSchema = new mongoose.Schema(
       sparse: true,
       trim: true,
     },
-    images: {
-      type: [String],
-      required: [true, 'At least one image is required'],
-      validate: {
-        validator: (v) => v && v.length >= 1 && v.length <= 5,
-        message: 'Must have between 1 and 5 images',
-      },
+    image: {
+      type: String,
+      required: [true, 'Image URL is required'],
+      trim: true,
     },
-    active: {
+    isAvailable: {
       type: Boolean,
       default: true,
+      index: true,
     },
     featured: {
       type: Boolean,
@@ -69,6 +71,11 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    specifications: {
+      type: Map,
+      of: String,
+      default: undefined,
+    },
   },
   {
     timestamps: true,
@@ -77,8 +84,9 @@ const productSchema = new mongoose.Schema(
 
 // Indexes for faster queries
 productSchema.index({ category: 1 });
+productSchema.index({ brand: 1 });
 productSchema.index({ name: 'text', description: 'text' });
-productSchema.index({ active: 1 });
+productSchema.index({ isAvailable: 1 });
 productSchema.index({ featured: 1 });
 
 module.exports = mongoose.model('Product', productSchema);
