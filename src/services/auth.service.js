@@ -212,6 +212,37 @@ const getUserById = async (userId) => {
   return user;
 };
 
+const changePassword = async (userId, currentPassword, newPassword) => {
+  if (!currentPassword || !newPassword) {
+    throw new BadRequestError('Current password and new password are required');
+  }
+
+  // Find user with password field
+  const user = await User.findById(userId).select('+password');
+  if (!user || !user.password) {
+    throw new UnauthorizedError('User not found or password not set');
+  }
+
+  // Verify current password
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new UnauthorizedError('Current password is incorrect');
+  }
+
+  // Check if new password is different from current password
+  const isSamePassword = await bcrypt.compare(newPassword, user.password);
+  if (isSamePassword) {
+    throw new BadRequestError('New password must be different from current password');
+  }
+
+  // Hash and update password
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  user.password = passwordHash;
+  await user.save();
+
+  return { message: 'Password changed successfully' };
+};
+
 module.exports = {
   googleLogin,
   sendPhoneOTP,
@@ -220,5 +251,6 @@ module.exports = {
   logout,
   registerUser,
   getUserById,
-  loginWithCredentials
+  loginWithCredentials,
+  changePassword
 };

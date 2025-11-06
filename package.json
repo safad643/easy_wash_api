@@ -9,6 +9,8 @@
     "google-auth-library": "^10.4.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.2",
+    "pdfkit": "^0.15.0",
+    "razorpay": "^2.9.6",
     "twilio": "^5.10.3"
   },
   "devDependencies": {

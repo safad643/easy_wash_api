@@ -21,6 +21,10 @@ module.exports = {
     apiKey: process.env.SMS_API_KEY,
     templateId: process.env.SMS_TEMPLATE_ID,
     senderId: process.env.SMS_SENDER_ID
+  },
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || '',
+    keySecret: process.env.RAZORPAY_KEY_SECRET || '',
+    currency: process.env.RAZORPAY_CURRENCY || 'INR'
   }
-  
 };
