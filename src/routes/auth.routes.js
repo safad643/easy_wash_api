@@ -11,5 +11,7 @@ router.post('/register', authController.register);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.get('/me', authenticate, authController.getMe);
+router.post('/password/reset/send-otp', authController.sendPasswordResetOTP);
+router.post('/password/reset', authController.resetPassword);
 
 module.exports = router;

@@ -42,7 +42,7 @@ class OrdersController {
       doc.fontSize(20).text('Invoice', { align: 'center' });
       doc.moveDown();
 
-      doc.fontSize(12).text(`Invoice ID: ${booking.bookingNumber || booking._id}`);
+      doc.fontSize(12).text(`Invoice ID: ${booking._id}`);
       doc.text(`Date: ${new Date(booking.createdAt).toLocaleString()}`);
       doc.text(`Status: ${booking.status}`);
       doc.moveDown();

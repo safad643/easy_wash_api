@@ -19,6 +19,19 @@ class BookingController {
     }
   }
 
+  async availableDays(req, res, next) {
+    try {
+      const { serviceId, daysAhead } = req.query;
+      const data = await bookingService.getAvailableDays({ 
+        serviceId, 
+        daysAhead: daysAhead ? parseInt(daysAhead) : undefined 
+      });
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async slots(req, res, next) {
     try {
       const { serviceId, date } = req.query;

@@ -2,24 +2,36 @@ const productService = require('../services/product.service');
 const { BadRequestError } = require('../utils/errors');
 
 const createProduct = async (req, res, next) => {
-  const productData = req.body;
-  const product = await productService.createProduct(productData);
-  res.status(201).json({
-    success: true,
-    data: product,
-  });
+  try {
+    const productData = req.body;
+    const product = await productService.createProduct(productData);
+    res.status(201).json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 const getProducts = async (req, res, next) => {
+  // Handle both 'status' (active/inactive) and 'isAvailable' (boolean) for backward compatibility
+  let isAvailable;
+  if (req.query.status !== undefined) {
+    isAvailable = req.query.status === 'active';
+  } else if (req.query.isAvailable !== undefined) {
+    isAvailable = req.query.isAvailable === 'true';
+  }
+
   const filters = {
     category: req.query.category,
     brand: req.query.brand,
     search: req.query.search,
     minPrice: req.query.minPrice ? Number(req.query.minPrice) : undefined,
     maxPrice: req.query.maxPrice ? Number(req.query.maxPrice) : undefined,
-    isAvailable: typeof req.query.isAvailable !== 'undefined' ? req.query.isAvailable === 'true' : undefined,
+    isAvailable: isAvailable,
     page: req.query.page || 1,
-    limit: req.query.limit || 10,
+    limit: req.query.limit || req.query.pageSize || 10, // Support both limit and pageSize
     sortBy: req.query.sortBy || 'name',
     sortOrder: req.query.sortOrder || 'asc',
   };
@@ -46,18 +58,22 @@ const getProductById = async (req, res, next) => {
 };
 
 const updateProduct = async (req, res, next) => {
-  const { id } = req.params;
-  const updateData = req.body;
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
 
-  // Prevent changing these fields
-  delete updateData._id;
-  delete updateData.createdAt;
+    // Prevent changing these fields
+    delete updateData._id;
+    delete updateData.createdAt;
 
-  const product = await productService.updateProduct(id, updateData);
-  res.json({
-    success: true,
-    data: product,
-  });
+    const product = await productService.updateProduct(id, updateData);
+    res.json({
+      success: true,
+      data: product,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 const deleteProduct = async (req, res, next) => {

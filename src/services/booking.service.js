@@ -1,15 +1,9 @@
 const Booking = require('../models/booking.model');
-const Product = require('../models/product.model');
+const Service = require('../models/service.model');
+const Vehicle = require('../models/vehicle.model');
+const Slot = require('../models/slot.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
 
-function generateBookingNumber() {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const ms = String(now.getTime()).slice(-5);
-  return `BK${yyyy}${mm}${dd}${ms}`;
-}
 
 function parseSchedule({ scheduledAt, scheduledDate, scheduledTime }) {
   if (scheduledAt) {
@@ -28,21 +22,67 @@ function parseSchedule({ scheduledAt, scheduledDate, scheduledTime }) {
 }
 
 class BookingService {
-  async previewPricing({ serviceId, addOns = [], paymentType = 'full', couponCode }) {
-    let servicePrice = 0;
-    // Best-effort: try to fetch from products as service catalog
-    if (serviceId) {
-      const product = await Product.findById(serviceId).lean().exec();
-      if (product) servicePrice = product.price || 0;
+  async previewPricing({ serviceId, vehicleId, addOns = [], paymentType = 'full', couponCode }) {
+    if (!serviceId) {
+      throw new BadRequestError('serviceId is required for pricing');
     }
-    if (!servicePrice) servicePrice = 500; // fallback base price
+
+    // Fetch the service
+    const service = await Service.findById(serviceId).lean().exec();
+    if (!service) {
+      throw new NotFoundError('Service not found');
+    }
+
+    // Get vehicle type if vehicleId is provided
+    let vehicleType = null;
+    if (vehicleId) {
+      const vehicle = await Vehicle.findById(vehicleId).lean().exec();
+      if (vehicle) {
+        vehicleType = vehicle.type || null;
+      }
+    }
+
+    // Find the matching price from service pricing array
+    let servicePrice = 0;
+    if (service.pricing && service.pricing.length > 0) {
+      if (vehicleType) {
+        // Try to find exact match for vehicle type
+        const matchingPricing = service.pricing.find(
+          (p) => p.vehicleType && p.vehicleType.toLowerCase() === vehicleType.toLowerCase()
+        );
+        if (matchingPricing) {
+          servicePrice = matchingPricing.price || 0;
+        } else {
+          // Try to find partial match (e.g., "car" matches "sedan car")
+          const partialMatch = service.pricing.find(
+            (p) => p.vehicleType && (
+              p.vehicleType.toLowerCase().includes(vehicleType.toLowerCase()) ||
+              vehicleType.toLowerCase().includes(p.vehicleType.toLowerCase())
+            )
+          );
+          if (partialMatch) {
+            servicePrice = partialMatch.price || 0;
+          } else {
+            // Use first available pricing as fallback
+            servicePrice = service.pricing[0].price || 0;
+          }
+        }
+      } else {
+        // No vehicle type, use first pricing entry
+        servicePrice = service.pricing[0].price || 0;
+      }
+    }
+
+    if (!servicePrice || servicePrice <= 0) {
+      throw new BadRequestError('Service pricing not found. Please contact support.');
+    }
 
     const addOnsTotal = 0; // placeholder until add-ons are modeled
     const discount = 0; // placeholder until coupons are modeled
     const subTotal = servicePrice + addOnsTotal - discount;
     const taxAmount = Math.round(subTotal * 0.0); // add tax if needed
     const totalAmount = subTotal + taxAmount;
-    const advanceAmount = paymentType === 'advance' ? Math.round(totalAmount * 0.2) : undefined;
+    const advanceAmount = paymentType === 'advance' ? Math.round(totalAmount * 0.3) : undefined; // Changed to 30% as per frontend
 
     return {
       servicePrice,
@@ -55,42 +95,99 @@ class BookingService {
     };
   }
 
+  async getAvailableDays({ serviceId, daysAhead = 30 }) {
+    if (!serviceId) throw new BadRequestError('serviceId is required');
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const endDate = new Date(today);
+    endDate.setDate(endDate.getDate() + daysAhead);
+
+    // Generate date range
+    const dateRange = [];
+    const currentDate = new Date(today);
+    while (currentDate <= endDate) {
+      dateRange.push(currentDate.toISOString().slice(0, 10));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Find all dates that have at least one available slot (status='available')
+    const availableSlots = await Slot.find({
+      date: { $in: dateRange },
+      status: 'available',
+    })
+      .select('date')
+      .lean()
+      .exec();
+
+    // Get unique dates that have available slots
+    const availableDaysSet = new Set(availableSlots.map(slot => slot.date));
+    const availableDays = Array.from(availableDaysSet).sort();
+
+    return { availableDays };
+  }
+
   async getAvailableSlots({ serviceId, date }) {
     if (!serviceId) throw new BadRequestError('serviceId is required');
     if (!date) throw new BadRequestError('date is required');
 
     const day = new Date(date);
     if (isNaN(day.getTime())) throw new BadRequestError('Invalid date');
+    const dateKey = day.toISOString().slice(0, 10);
 
-    // Business hours 09:00 - 17:30, 30-min intervals
-    const slots = [];
-    const start = new Date(day);
-    start.setHours(9, 0, 0, 0);
-    const end = new Date(day);
-    end.setHours(17, 30, 0, 0);
+    // Fetch only available slots (status='available') for this date
+    const availableSlots = await Slot.find({ 
+      date: dateKey,
+      status: 'available',
+    })
+      .sort({ time: 1 })
+      .lean()
+      .exec();
 
-    // Fetch existing bookings for that day to mark unavailable times
+    // Fetch existing PAID bookings for that day to mark booked slots
+    // Only bookings with paymentStatus='paid' should block slots
+    // (Bookings with paymentStatus='pending' haven't completed payment, so slot is still available)
     const dayStart = new Date(day);
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(day);
     dayEnd.setHours(23, 59, 59, 999);
 
-    const existing = await Booking.find({
+    const existingBookings = await Booking.find({
       serviceId,
-      status: { $in: ['pending', 'confirmed'] },
+      paymentStatus: 'paid', // Only count bookings that have been paid
+      status: { $in: ['pending', 'confirmed'] }, // Exclude cancelled/completed
       scheduledAt: { $gte: dayStart, $lte: dayEnd },
     }).select('scheduledAt').lean().exec();
 
     const bookedTimes = new Set(
-      existing.map(b => new Date(b.scheduledAt).toTimeString().slice(0,5))
+      existingBookings.map(b => new Date(b.scheduledAt).toTimeString().slice(0, 5))
     );
 
-    for (let t = new Date(start); t <= end; t = new Date(t.getTime() + 30 * 60000)) {
-      const label = t.toTimeString().slice(0,5);
-      slots.push({ startTime: label, endTime: label, isAvailable: !bookedTimes.has(label) });
-    }
+    // Filter out slots that are already booked by PAID bookings
+    // Map slots to the expected format - only return truly available slots
+    const slots = availableSlots
+      .filter(slot => !bookedTimes.has(slot.time))
+      .map((slot, index, filteredSlots) => {
+        // Calculate end time - use next slot's time if available, otherwise add 1 hour (slots are hourly)
+        let endTimeStr;
+        if (index < filteredSlots.length - 1) {
+          // Use next slot's start time as this slot's end time
+          endTimeStr = filteredSlots[index + 1].time;
+        } else {
+          // Last slot - add 1 hour
+          const [hours, minutes] = slot.time.split(':').map(Number);
+          const endTime = new Date(2000, 0, 1, hours + 1, minutes);
+          endTimeStr = `${String(endTime.getHours()).padStart(2, '0')}:${String(endTime.getMinutes()).padStart(2, '0')}`;
+        }
 
-    return { date: day.toISOString().slice(0,10), slots };
+        return {
+          startTime: slot.time,
+          endTime: endTimeStr,
+          isAvailable: true, // All slots returned are available
+        };
+      });
+
+    return { date: dateKey, slots };
   }
 
   async createBooking(userId, input) {
@@ -98,28 +195,91 @@ class BookingService {
 
     const preview = await this.previewPricing({
       serviceId: input.serviceId,
+      vehicleId: input.vehicleId,
       addOns: input.addOns,
       paymentType: input.paymentType,
       couponCode: input.couponCode,
     });
+
+    // Extract date and time from scheduledAt
+    const dateKey = scheduledAt.toISOString().slice(0, 10);
+    const timeKey = scheduledAt.toTimeString().slice(0, 5); // HH:MM format
+
+    // Check if slot exists and is available
+    const slot = await Slot.findOne({ date: dateKey, time: timeKey });
+    if (!slot) {
+      throw new BadRequestError('Slot not found for the selected date and time');
+    }
+    if (slot.status !== 'available') {
+      throw new BadRequestError('Selected slot is not available');
+    }
+
+    // Build full address object from input
+    let addressObject = null;
+    if (input.address) {
+      // If address is provided as an object, use it directly
+      if (typeof input.address === 'object') {
+        addressObject = {
+          label: input.address.label || '',
+          line1: input.address.line1 || input.address.addressLine1 || '',
+          line2: input.address.line2 || input.address.addressLine2 || '',
+          city: input.address.city || '',
+          state: input.address.state || '',
+          pincode: input.address.pincode || '',
+          landmark: input.address.landmark || '',
+          phone: input.address.phone || '',
+        };
+      } else {
+        // If address is provided as a string (legacy support), we need at least line1, city, state, pincode
+        throw new BadRequestError('Address must be provided as an object with line1, city, state, and pincode');
+      }
+    } else if (input.addressId) {
+      // If addressId is provided, fetch the address and save all fields
+      const Address = require('../models/address.model');
+      const address = await Address.findById(input.addressId).lean();
+      if (!address) {
+        throw new BadRequestError('Address not found');
+      }
+      addressObject = {
+        label: address.label || '',
+        line1: address.line1 || '',
+        line2: address.line2 || '',
+        city: address.city || '',
+        state: address.state || '',
+        pincode: address.pincode || '',
+        landmark: address.landmark || '',
+        phone: address.phone || '',
+      };
+    }
+    
+    if (!addressObject || !addressObject.line1 || !addressObject.city || !addressObject.state || !addressObject.pincode) {
+      throw new BadRequestError('Address is required with line1, city, state, and pincode');
+    }
 
     const booking = await Booking.create({
       userId,
       serviceId: input.serviceId,
       serviceName: input.serviceName,
       vehicleId: input.vehicleId,
-      addressId: input.addressId,
+      slotId: slot._id,
+      address: addressObject,
       scheduledAt,
       addOns: input.addOns || [],
       paymentType: input.paymentType || 'full',
-      notes: input.notes,
       status: 'pending',
       paymentStatus: 'pending',
       amount: preview.totalAmount,
       totalAmount: preview.totalAmount,
       advanceAmount: preview.advanceAmount,
-      bookingNumber: generateBookingNumber(),
+      // Store coordinates if provided
+      coordinates: input.coordinates ? {
+        latitude: input.coordinates.latitude,
+        longitude: input.coordinates.longitude,
+      } : undefined,
     });
+
+    // DO NOT mark slot as booked here - only mark it after successful payment
+    // This prevents slots from being locked if payment fails
 
     return booking;
   }
@@ -161,6 +321,18 @@ class BookingService {
     if (!booking) throw new NotFoundError('Booking not found');
     if (booking.status === 'cancelled') return booking;
     if (booking.status === 'completed') throw new BadRequestError('Completed bookings cannot be cancelled');
+
+    // Release the slot if booking was confirmed or pending
+    if (booking.status === 'pending' || booking.status === 'confirmed') {
+      if (booking.slotId) {
+        const slot = await Slot.findById(booking.slotId);
+        if (slot && slot.status === 'booked' && slot.bookingId && slot.bookingId.toString() === booking._id.toString()) {
+          slot.status = 'available';
+          slot.bookingId = null;
+          await slot.save();
+        }
+      }
+    }
 
     booking.status = 'cancelled';
     await booking.save();

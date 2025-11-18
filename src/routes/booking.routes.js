@@ -6,6 +6,9 @@ const { authenticate } = require('../middlewares/auth.middleware');
 // Public: preview pricing
 router.post('/preview', authenticate, bookingController.preview);
 
+// Public: available days (no auth needed to browse)
+router.get('/available-days', bookingController.availableDays);
+
 // Public: available slots (no auth needed to browse)
 router.get('/slots', bookingController.slots);
 

@@ -41,7 +41,19 @@ const userSchema = new mongoose.Schema({
     enum: ['customer', 'staff', 'admin'],
     default: 'customer',
     index: true,
-  }
+  },
+
+  // Staff-specific fields
+  skills: {
+    type: [String],
+    default: [],
+  },
+  status: {
+    type: String,
+    enum: ['active', 'suspended'],
+    default: 'active',
+    index: true,
+  },
 }, {
   timestamps: true
 });

@@ -2,18 +2,43 @@ const checkoutService = require('../services/checkout.service');
 const { BadRequestError } = require('../utils/errors');
 
 const createSession = async (req, res, next) => {
-  const { bookingId, paymentType, amount } = req.body;
-  if (!bookingId || !amount) {
-    throw new BadRequestError('bookingId and amount are required');
+  try {
+    const { bookingData, paymentType, amount } = req.body;
+    if (!bookingData || !amount) {
+      throw new BadRequestError('bookingData and amount are required');
+    }
+    const session = await checkoutService.createSession(req.userId, { bookingData, paymentType, amount });
+    res.json({ success: true, data: session });
+  } catch (error) {
+    next(error);
   }
-  const session = await checkoutService.createSession(req.userId, { bookingId, paymentType, amount });
-  res.json({ success: true, data: session });
 };
 
 const paymentSuccess = async (req, res, next) => {
-  const { sessionId, transactionId, paymentMethod } = req.body;
-  const result = await checkoutService.handleSuccess(req.userId, { sessionId, transactionId, paymentMethod });
-  res.json({ success: true, data: { success: result.success, bookingId: result.bookingId, message: result.message } });
+  try {
+    const { sessionId, transactionId, paymentMethod, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const result = await checkoutService.handleSuccess(req.userId, { 
+      sessionId, 
+      transactionId, 
+      paymentMethod,
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    });
+    res.json({ success: true, data: { success: result.success, bookingId: result.bookingId, message: result.message } });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyPayment = async (req, res, next) => {
+  try {
+    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+    const result = await checkoutService.verifyPayment(req.userId, { razorpay_order_id, razorpay_payment_id, razorpay_signature });
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
 };
 
 const paymentFailure = async (req, res, next) => {
@@ -26,6 +51,7 @@ module.exports = {
   createSession,
   paymentSuccess,
   paymentFailure,
+  verifyPayment,
 };
 
 

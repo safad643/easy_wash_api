@@ -31,11 +31,18 @@ class AppError extends Error {
     }
   }
   
+  class ForbiddenError extends AppError {
+    constructor(message = 'Forbidden') {
+      super(message, 403);
+    }
+  }
+  
   module.exports = {
     AppError,
     BadRequestError,
     UnauthorizedError,
     NotFoundError,
-    ConflictError
+    ConflictError,
+    ForbiddenError
   };
   

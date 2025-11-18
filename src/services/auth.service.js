@@ -5,6 +5,7 @@ const OTP = require('../models/otp.model');
 const googleService = require('./google.service');
 const { generateAccessToken, generateRefreshToken } = require('../utils/jwt.util');
 const { sendOTP } = require('../utils/sms.util');
+const { sendOTP: sendEmailOTP } = require('../utils/email.util');
 const { UnauthorizedError, BadRequestError } = require('../utils/errors');
 
 const loginWithCredentials = async ({ identifier, password }) => {
@@ -12,14 +13,20 @@ const loginWithCredentials = async ({ identifier, password }) => {
   if (!identifier || !password) {
     throw new BadRequestError('Identifier and password are required');
   }
-  const query = identifier.includes('@') ? { email: identifier } : { phone: identifier };
+  const query = identifier.includes('@') ? { email: identifier.toLowerCase() } : { phone: identifier };
   const user = await User.findOne(query).select('+password');
   if (!user || !user.password) {
     throw new UnauthorizedError('Invalid credentials');
   }
+  
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
     throw new UnauthorizedError('Invalid credentials');
+  }
+
+  // Check if user is suspended (for staff)
+  if (user.role === 'staff' && user.status === 'suspended') {
+    throw new UnauthorizedError('Your account has been suspended. Please contact administrator.');
   }
 
   const accessToken = generateAccessToken(user._id, user.role);
@@ -72,7 +79,7 @@ const sendPhoneOTP = async (phone) => {
       throw new BadRequestError('Invalid phone number format');
     }
     
-    await OTP.deleteMany({ phone });
+    await OTP.deleteMany({ phone, purpose: 'verification' });
     
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     
@@ -81,7 +88,8 @@ const sendPhoneOTP = async (phone) => {
     await OTP.create({
       phone,
       otp: hashedOTP,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      purpose: 'verification'
     });
     
     await sendOTP(phone, otpCode);
@@ -95,7 +103,7 @@ const sendPhoneOTP = async (phone) => {
 
 const verifyPhoneOTP = async (phone, otpCode) => {
   try {
-    const otpRecord = await OTP.findOne({ phone });
+    const otpRecord = await OTP.findOne({ phone, purpose: 'verification' });
     
     if (!otpRecord) {
       throw new UnauthorizedError('Invalid or expired OTP');
@@ -243,6 +251,123 @@ const changePassword = async (userId, currentPassword, newPassword) => {
   return { message: 'Password changed successfully' };
 };
 
+const sendPasswordResetOTP = async (identifier) => {
+  try {
+    if (!identifier) {
+      throw new BadRequestError('Email or phone number is required');
+    }
+
+    // Determine if identifier is email or phone
+    const isEmail = identifier.includes('@');
+    const query = isEmail ? { email: identifier } : { phone: identifier };
+    
+    // Find user with password field
+    const user = await User.findOne(query).select('+password');
+    if (!user) {
+      // Explicitly inform that account does not exist
+      throw new BadRequestError('Account not found');
+    }
+
+    // Check if user has a password set
+    if (!user.password) {
+      throw new BadRequestError('Password not set for this account. Please use alternative login method.');
+    }
+
+    // Delete existing password reset OTPs
+    const deleteQuery = isEmail ? { email: identifier, purpose: 'password-reset' } : { phone: identifier, purpose: 'password-reset' };
+    await OTP.deleteMany(deleteQuery);
+
+    // Generate OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+    // Create OTP record
+    const otpData = {
+      otp: hashedOTP,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      purpose: 'password-reset'
+    };
+
+    if (isEmail) {
+      otpData.email = identifier;
+      await OTP.create(otpData);
+      await sendEmailOTP(identifier, otpCode);
+    } else {
+      otpData.phone = identifier;
+      await OTP.create(otpData);
+      await sendOTP(identifier, otpCode);
+    }
+
+    return { message: 'If an account exists with this email/phone, an OTP has been sent' };
+  } catch (error) {
+    if (error.isOperational) throw error;
+    throw new Error(`Failed to send password reset OTP: ${error.message}`);
+  }
+};
+
+const resetPasswordWithOTP = async (identifier, otpCode, newPassword) => {
+  try {
+    if (!identifier || !otpCode || !newPassword) {
+      throw new BadRequestError('Email/phone, OTP, and new password are required');
+    }
+
+    // Determine if identifier is email or phone
+    const isEmail = identifier.includes('@');
+    const query = isEmail ? { email: identifier, purpose: 'password-reset' } : { phone: identifier, purpose: 'password-reset' };
+
+    // Find OTP record
+    const otpRecord = await OTP.findOne(query);
+    
+    if (!otpRecord) {
+      throw new UnauthorizedError('Invalid or expired OTP');
+    }
+
+    // Check if OTP has expired
+    if (otpRecord.expiresAt < new Date()) {
+      await OTP.deleteOne({ _id: otpRecord._id });
+      throw new UnauthorizedError('OTP has expired');
+    }
+
+    // Verify OTP
+    const isValid = await bcrypt.compare(otpCode, otpRecord.otp);
+    if (!isValid) {
+      throw new UnauthorizedError('Invalid OTP');
+    }
+
+    // Find user
+    const userQuery = isEmail ? { email: identifier } : { phone: identifier };
+    const user = await User.findOne(userQuery).select('+password');
+    
+    if (!user) {
+      throw new UnauthorizedError('User not found');
+    }
+
+    if (!user.password) {
+      throw new BadRequestError('Password not set for this account');
+    }
+
+    // Check if new password is different from current password
+    const isSamePassword = await bcrypt.compare(newPassword, user.password);
+    if (isSamePassword) {
+      await OTP.deleteOne({ _id: otpRecord._id });
+      throw new BadRequestError('New password must be different from current password');
+    }
+
+    // Update password
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    user.password = passwordHash;
+    await user.save();
+
+    // Delete used OTP
+    await OTP.deleteOne({ _id: otpRecord._id });
+
+    return { message: 'Password reset successfully' };
+  } catch (error) {
+    if (error.isOperational) throw error;
+    throw new Error(`Password reset failed: ${error.message}`);
+  }
+};
+
 module.exports = {
   googleLogin,
   sendPhoneOTP,
@@ -252,5 +377,7 @@ module.exports = {
   registerUser,
   getUserById,
   loginWithCredentials,
-  changePassword
+  changePassword,
+  sendPasswordResetOTP,
+  resetPasswordWithOTP
 };

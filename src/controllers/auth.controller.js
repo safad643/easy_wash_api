@@ -12,7 +12,8 @@ const login = async (req, res, next) => {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
 
@@ -36,7 +37,8 @@ const googleAuth = async (req, res, next) => {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
 
@@ -76,7 +78,8 @@ const verifyOTP = async (req, res, next) => {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
 
@@ -111,7 +114,12 @@ const logout = async (req, res, next) => {
     await authService.logout(refreshToken);
   }
 
-  res.clearCookie('refreshToken');
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/'
+  });
 
   res.json({
     success: true,
@@ -133,7 +141,8 @@ const register = async (req, res, next) => {
   res.cookie('refreshToken', refreshToken, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
   res.status(201).json({
@@ -153,6 +162,36 @@ const getMe = async (req, res, next) => {
   });
 };
 
+const sendPasswordResetOTP = async (req, res, next) => {
+  const { identifier } = req.body;
+  
+  if (!identifier) {
+    throw new BadRequestError('Email or phone number is required');
+  }
+  
+  const result = await authService.sendPasswordResetOTP(identifier);
+  
+  res.json({ 
+    success: true, 
+    message: result.message 
+  });
+};
+
+const resetPassword = async (req, res, next) => {
+  const { identifier, otp, newPassword } = req.body;
+  
+  if (!identifier || !otp || !newPassword) {
+    throw new BadRequestError('Email/phone, OTP, and new password are required');
+  }
+  
+  const result = await authService.resetPasswordWithOTP(identifier, otp, newPassword);
+  
+  res.json({
+    success: true,
+    message: result.message
+  });
+};
+
 module.exports = {
   googleAuth,
   sendOTP,
@@ -161,5 +200,7 @@ module.exports = {
   logout,
   register,
   getMe,
-  login
+  login,
+  sendPasswordResetOTP,
+  resetPassword
 };

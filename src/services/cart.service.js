@@ -23,11 +23,15 @@ class CartService {
       throw new BadRequestError('Only product cart items are supported currently');
     }
 
-    const product = await Product.findById(itemId);
+    const product = await Product.findById(itemId).populate('category', 'isActive');
     if (!product) {
       throw new NotFoundError('Product not found');
     }
     if (!product.isAvailable) {
+      throw new BadRequestError('Product is not available');
+    }
+    // Check if product's category is active
+    if (!product.category || !product.category.isActive) {
       throw new BadRequestError('Product is not available');
     }
 
@@ -59,9 +63,13 @@ class CartService {
     }
 
     // Refresh unit price from product in case it changed
-    const product = await Product.findById(item.product);
+    const product = await Product.findById(item.product).populate('category', 'isActive');
     if (!product) {
       throw new NotFoundError('Product not found');
+    }
+    // Check if product's category is active
+    if (!product.category || !product.category.isActive) {
+      throw new BadRequestError('Product is not available');
     }
     item.quantity = quantity;
     item.unitPrice = product.price;
