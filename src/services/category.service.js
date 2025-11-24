@@ -3,6 +3,8 @@ const { NotFoundError, BadRequestError } = require('../utils/errors');
 
 class CategoryService {
   async createCategory(categoryData) {
+    // Always set type to 'product' for categories
+    categoryData.type = 'product';
     const existing = await Category.findOne({ name: categoryData.name, type: categoryData.type });
     if (existing) {
       throw new BadRequestError('Category with this name and type already exists');
@@ -67,12 +69,14 @@ class CategoryService {
   }
 
   async updateCategory(id, updateData) {
+    // Always set type to 'product' for categories
+    updateData.type = 'product';
     // Prevent duplicate name+type
     if (updateData.name || updateData.type) {
       const existing = await Category.findOne({
         _id: { $ne: id },
         name: updateData.name || (await Category.findById(id))?.name,
-        type: updateData.type || (await Category.findById(id))?.type,
+        type: updateData.type,
       });
       if (existing) {
         throw new BadRequestError('Category with this name and type already exists');

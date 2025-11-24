@@ -31,7 +31,8 @@ class VehicleService {
     if (String(vehicle.user) !== String(userId)) throw new UnauthorizedError('Not allowed');
 
     const allowed = [
-      'type',
+      'category',
+      'bodyType',
       'brand',
       'model',
       'year',

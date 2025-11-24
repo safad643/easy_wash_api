@@ -33,31 +33,45 @@ class BookingService {
       throw new NotFoundError('Service not found');
     }
 
-    // Get vehicle type if vehicleId is provided
-    let vehicleType = null;
+    // Get vehicle category and bodyType if vehicleId is provided
+    let vehicleCategory = null;
+    let vehicleBodyType = null;
     if (vehicleId) {
       const vehicle = await Vehicle.findById(vehicleId).lean().exec();
       if (vehicle) {
-        vehicleType = vehicle.type || null;
+        vehicleCategory = vehicle.category || null;
+        vehicleBodyType = vehicle.bodyType || null;
       }
     }
 
     // Find the matching price from service pricing array
     let servicePrice = 0;
     if (service.pricing && service.pricing.length > 0) {
-      if (vehicleType) {
-        // Try to find exact match for vehicle type
-        const matchingPricing = service.pricing.find(
-          (p) => p.vehicleType && p.vehicleType.toLowerCase() === vehicleType.toLowerCase()
-        );
+      if (vehicleCategory || vehicleBodyType) {
+        // Try to find exact match for bodyType first
+        let matchingPricing = null;
+        if (vehicleBodyType) {
+          matchingPricing = service.pricing.find(
+            (p) => p.vehicleType && p.vehicleType.toLowerCase() === vehicleBodyType.toLowerCase()
+          );
+        }
+        
+        // If no bodyType match, try category match
+        if (!matchingPricing && vehicleCategory) {
+          matchingPricing = service.pricing.find(
+            (p) => p.vehicleType && p.vehicleType.toLowerCase() === vehicleCategory.toLowerCase()
+          );
+        }
+        
         if (matchingPricing) {
           servicePrice = matchingPricing.price || 0;
         } else {
-          // Try to find partial match (e.g., "car" matches "sedan car")
+          // Try to find partial match (e.g., "car" matches "sedan car", "bike" matches "scooter")
+          const searchTerms = [vehicleCategory, vehicleBodyType].filter(Boolean);
           const partialMatch = service.pricing.find(
-            (p) => p.vehicleType && (
-              p.vehicleType.toLowerCase().includes(vehicleType.toLowerCase()) ||
-              vehicleType.toLowerCase().includes(p.vehicleType.toLowerCase())
+            (p) => p.vehicleType && searchTerms.some(term =>
+              p.vehicleType.toLowerCase().includes(term.toLowerCase()) ||
+              term.toLowerCase().includes(p.vehicleType.toLowerCase())
             )
           );
           if (partialMatch) {

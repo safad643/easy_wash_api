@@ -8,9 +8,15 @@ const vehicleSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    type: {
+    category: {
       type: String,
-      enum: ['car', 'bike', 'suv', 'sedan', 'hatchback'],
+      enum: ['car', 'bike'],
+      required: true,
+      index: true,
+    },
+    bodyType: {
+      type: String,
+      enum: ['sedan', 'suv', 'hatchback', 'scooter', 'motorcycle'],
       required: true,
       index: true,
     },

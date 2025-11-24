@@ -2,6 +2,8 @@ const categoryService = require('../services/category.service');
 
 const createCategory = async (req, res, next) => {
   const categoryData = req.body;
+  // Always set type to 'product' for categories
+  categoryData.type = 'product';
   const category = await categoryService.createCategory(categoryData);
   res.status(201).json({ success: true, data: category });
 };
@@ -34,6 +36,8 @@ const updateCategory = async (req, res, next) => {
   const updateData = req.body;
   delete updateData._id;
   delete updateData.createdAt;
+  // Always set type to 'product' for categories
+  updateData.type = 'product';
   const category = await categoryService.updateCategory(id, updateData);
   res.json({ success: true, data: category });
 };

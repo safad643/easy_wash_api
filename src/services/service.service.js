@@ -74,10 +74,10 @@ class ServiceService {
   }
 
   async updateService(id, updateData) {
-    // Validate category is either 'bike' or 'car' if provided
-    if (updateData.category && !['bike', 'car'].includes(updateData.category)) {
-      throw new BadRequestError('Category must be either "bike" or "car"');
-    }
+    // Category cannot be edited - ensure it's not in updateData
+    delete updateData.category;
+    // VehicleType is not a top-level field (it's in pricing array) - remove if sent
+    delete updateData.vehicleType;
 
     const service = await Service.findByIdAndUpdate(id, updateData, {
       new: true,

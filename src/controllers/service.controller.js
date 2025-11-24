@@ -34,6 +34,10 @@ const updateService = async (req, res, next) => {
   const updateData = req.body;
   delete updateData._id;
   delete updateData.createdAt;
+  // Category cannot be edited - remove it from updateData
+  delete updateData.category;
+  // VehicleType is not a top-level field (it's in pricing array) - remove if sent
+  delete updateData.vehicleType;
   const service = await serviceService.updateService(id, updateData);
   res.json({ success: true, data: service });
 };
