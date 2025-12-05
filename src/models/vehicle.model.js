@@ -16,7 +16,19 @@ const vehicleSchema = new mongoose.Schema(
     },
     bodyType: {
       type: String,
-      enum: ['sedan', 'suv', 'hatchback', 'scooter', 'motorcycle'],
+      enum: [
+        'sedan',
+        'suv',
+        'hatchback',
+        'luxury',
+        'super-bike',
+        'sports-bike',
+        'cruiser',
+        'scooty',
+        // Legacy values retained temporarily for backward compatibility
+        'scooter',
+        'motorcycle',
+      ],
       required: true,
       index: true,
     },

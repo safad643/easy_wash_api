@@ -4,6 +4,7 @@ const config = require('../config/config');
 const Booking = require('../models/booking.model');
 const Slot = require('../models/slot.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
+const ProductOrderService = require('./productOrder.service');
 
 class CheckoutService {
   constructor() {
@@ -13,11 +14,27 @@ class CheckoutService {
       : null;
   }
 
-  async createSession(userId, { bookingData, paymentType, amount }) {
-    if (!bookingData || !amount) {
+  async createSession(userId, { bookingData, paymentType, amount, type = 'service', orderData }) {
+    if (!amount) {
+      throw new BadRequestError('Amount is required');
+    }
+
+    if (!this.razorpay) {
+      throw new BadRequestError('Payment gateway is not configured. Please contact support.');
+    }
+
+    if (type === 'product') {
+      return this.createProductOrderSession(userId, { orderData, amount });
+    }
+
+    if (!bookingData) {
       throw new BadRequestError('bookingData and amount are required');
     }
 
+    return this.createServiceBookingSession(userId, { bookingData, paymentType, amount });
+  }
+
+  async createServiceBookingSession(userId, { bookingData, paymentType, amount }) {
     // Validate booking data
     if (!bookingData.serviceId || !bookingData.vehicleId || !bookingData.scheduledAt) {
       throw new BadRequestError('serviceId, vehicleId, and scheduledAt are required in bookingData');
@@ -68,11 +85,6 @@ class CheckoutService {
       throw new BadRequestError('Requested amount exceeds payable amount');
     }
 
-    // Check if Razorpay is configured
-    if (!this.razorpay) {
-      throw new BadRequestError('Payment gateway is not configured. Please contact support.');
-    }
-
     // Create Razorpay order
     // Generate receipt that's <= 40 characters (Razorpay requirement)
     // Format: RCP + last 8 digits of timestamp + random 4 chars
@@ -87,6 +99,7 @@ class CheckoutService {
       receipt: receipt, // Max 15 characters (3 + 8 + 4)
       notes: {
         userId: String(userId),
+        orderType: 'service',
         paymentType: paymentType || 'full',
         amountPaid: String(amount), // Store the actual amount paid
         // Store booking data as JSON string (Razorpay notes have size limits, so we store essential data)
@@ -114,6 +127,78 @@ class CheckoutService {
         sessionId,
         orderId: razorpayOrder.id,
         amount,
+        currency: razorpayOrder.currency,
+        expiresAt,
+      };
+    } catch (error) {
+      console.error('Razorpay order creation error:', error);
+      throw new BadRequestError('Failed to create payment order. Please try again.');
+    }
+  }
+
+  async createProductOrderSession(userId, { orderData, amount }) {
+    if (!orderData || !Array.isArray(orderData.items) || orderData.items.length === 0) {
+      throw new BadRequestError('Order items are required for product checkout');
+    }
+
+    if (!orderData.addressId) {
+      throw new BadRequestError('Delivery address is required');
+    }
+
+    const preview = await ProductOrderService.previewOrder(userId, {
+      ...orderData,
+      paymentMethod: 'online',
+    });
+
+    const payableAmount = preview.totalAmount;
+    if (payableAmount <= 0) {
+      throw new BadRequestError('Invalid order total amount');
+    }
+
+    if (Math.abs(payableAmount - amount) > 0.01) {
+      throw new BadRequestError('Requested amount does not match order total');
+    }
+
+    const timestampStr = String(Date.now());
+    const randomStr = crypto.randomBytes(2).toString('hex');
+    const receipt = `RCP${timestampStr.slice(-8)}${randomStr}`;
+
+    const compactItems = preview.normalizedItems.map((item) => ({
+      p: String(item.productId),
+      q: item.quantity,
+    }));
+
+    const productOrderPayload = {
+      items: compactItems,
+      addressId: orderData.addressId,
+      discount: preview.discount,
+      tax: preview.tax,
+      shippingFee: preview.shippingFee,
+      source: orderData.source || 'cart',
+      notes: orderData.notes ? String(orderData.notes).slice(0, 200) : '',
+    };
+
+    const orderOptions = {
+      amount: Math.round(payableAmount * 100),
+      currency: config.razorpay.currency || 'INR',
+      receipt,
+      notes: {
+        userId: String(userId),
+        orderType: 'product',
+        amountPaid: String(payableAmount),
+        productOrder: JSON.stringify(productOrderPayload),
+      },
+    };
+
+    try {
+      const razorpayOrder = await this.razorpay.orders.create(orderOptions);
+      const sessionId = `sess_${crypto.randomBytes(12).toString('hex')}`;
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+
+      return {
+        sessionId,
+        orderId: razorpayOrder.id,
+        amount: payableAmount,
         currency: razorpayOrder.currency,
         expiresAt,
       };
@@ -151,27 +236,21 @@ class CheckoutService {
         throw new BadRequestError('Payment not completed');
       }
 
-      // Get booking data and payment details from Razorpay order notes
-      let bookingData = null;
-      let amountPaid = null;
-      let paymentType = 'full';
-      
-      try {
-        const order = await this.razorpay.orders.fetch(razorpay_order_id);
-        if (order.notes) {
-          if (order.notes.bookingData) {
-            bookingData = JSON.parse(order.notes.bookingData);
-          }
-          if (order.notes.amountPaid) {
-            amountPaid = parseFloat(order.notes.amountPaid);
-          }
-          if (order.notes.paymentType) {
-            paymentType = order.notes.paymentType;
-          }
-        }
-      } catch (orderError) {
-        console.error('Error fetching order from Razorpay:', orderError);
+      const order = await this.razorpay.orders.fetch(razorpay_order_id);
+      const notes = order?.notes || {};
+      const amountPaid = notes.amountPaid ? parseFloat(notes.amountPaid) : null;
+      const orderType = notes.orderType || (notes.productOrder ? 'product' : 'service');
+
+      if (orderType === 'product') {
+        return await this.completeProductOrderPayment(userId, {
+          notes,
+          razorpay_order_id,
+          razorpay_payment_id,
+        });
       }
+
+      const bookingData = notes.bookingData ? JSON.parse(notes.bookingData) : null;
+      let paymentType = notes.paymentType || 'full';
 
       if (!bookingData) {
         throw new BadRequestError('Booking data not found in payment order');
@@ -224,6 +303,7 @@ class CheckoutService {
 
       return {
         success: true,
+        type: 'service',
         bookingId: String(booking._id),
         message: 'Payment received. Once slot assigned to a staff we\'ll let you know.',
         paymentId: razorpay_payment_id,
@@ -233,6 +313,62 @@ class CheckoutService {
       console.error('Payment verification error:', error);
       throw new BadRequestError('Payment verification failed');
     }
+  }
+
+  async completeProductOrderPayment(userId, { notes, razorpay_order_id, razorpay_payment_id }) {
+    if (!notes || !notes.productOrder) {
+      throw new BadRequestError('Product order payload missing in payment notes');
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(notes.productOrder);
+    } catch (error) {
+      console.error('Failed to parse product order payload from notes', error);
+      throw new BadRequestError('Invalid product order payload');
+    }
+
+    if (!payload.addressId) {
+      throw new BadRequestError('Delivery address missing in payment payload');
+    }
+
+    const items = (payload.items || []).map((item) => ({
+      productId: item.productId || item.p,
+      quantity: item.quantity || item.q || 1,
+    }));
+
+    if (items.length === 0) {
+      throw new BadRequestError('No items found in product payment payload');
+    }
+
+    const orderInput = {
+      items,
+      addressId: payload.addressId,
+      discount: payload.discount || 0,
+      tax: payload.tax || 0,
+      shippingFee: payload.shippingFee || 0,
+      source: payload.source || 'cart',
+      notes: payload.notes,
+      paymentMethod: 'online',
+    };
+
+    const order = await ProductOrderService.createOrder(userId, orderInput);
+
+    if (!order.meta) {
+      order.meta = new Map();
+    }
+    order.meta.set('razorpay_order_id', razorpay_order_id);
+    order.meta.set('razorpay_payment_id', razorpay_payment_id);
+    await order.save();
+
+    return {
+      success: true,
+      type: 'product',
+      orderId: String(order._id),
+      message: 'Payment received. Your order is now confirmed.',
+      paymentId: razorpay_payment_id,
+      orderNumber: order.orderNumber,
+    };
   }
 
   async handleSuccess(userId, { sessionId, transactionId, paymentMethod, razorpay_order_id, razorpay_payment_id, razorpay_signature }) {
@@ -275,6 +411,7 @@ class CheckoutService {
 
     return {
       success: true,
+      type: 'service',
       bookingId: String(booking._id),
       message: 'Payment received. Once slot assigned to a staff we\'ll let you know.',
       meta: { transactionId, paymentMethod: paymentMethod || 'razorpay' },

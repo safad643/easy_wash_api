@@ -37,7 +37,19 @@ class CartService {
 
     const cart = await this.getOrCreateCart(userId);
 
-    const existing = cart.items.find((i) => i.product.toString() === product._id.toString());
+    const existing = cart.items.find((item) => {
+      const currentProduct = item.product;
+      if (!currentProduct) {
+        return false;
+      }
+      if (typeof currentProduct.equals === 'function') {
+        // Handles both populated docs and ObjectIds
+        return currentProduct.equals(product._id);
+      }
+      const currentProductId =
+        (currentProduct && currentProduct._id) ? currentProduct._id.toString() : currentProduct.toString();
+      return currentProductId === product._id.toString();
+    });
     if (existing) {
       existing.quantity += quantity;
       existing.unitPrice = product.price; // keep latest price

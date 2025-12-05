@@ -310,10 +310,41 @@ class BookingService {
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const total = await Booking.countDocuments(query);
-    const data = await Booking.find(query)
+    const bookings = await Booking.find(query)
+      .populate('slotId', 'date time')
+      .populate('vehicleId', 'brand model plateNumber type year')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
+
+    // Format bookings with scheduledDate and scheduledTime from slot or scheduledAt
+    const data = bookings.map(booking => {
+      // Get scheduled date and time from slot if available, otherwise from scheduledAt
+      let scheduledDate = null;
+      let scheduledTime = null;
+      
+      if (booking.slotId && booking.slotId.date && booking.slotId.time) {
+        scheduledDate = booking.slotId.date;
+        scheduledTime = booking.slotId.time;
+      } else if (booking.scheduledAt) {
+        const scheduledDateTime = new Date(booking.scheduledAt);
+        scheduledDate = scheduledDateTime.toISOString().split('T')[0];
+        scheduledTime = scheduledDateTime.toTimeString().slice(0, 5);
+      }
+
+      return {
+        ...booking,
+        scheduledDate,
+        scheduledTime,
+        vehicleDetails: booking.vehicleId ? {
+          brand: booking.vehicleId.brand,
+          model: booking.vehicleId.model,
+          number: booking.vehicleId.plateNumber,
+          type: booking.vehicleId.type,
+        } : null,
+      };
+    });
 
     return {
       data,
@@ -325,9 +356,40 @@ class BookingService {
   }
 
   async getBooking(userId, id) {
-    const booking = await Booking.findOne({ _id: id, userId });
+    const booking = await Booking.findOne({ _id: id, userId })
+      .populate('slotId', 'date time')
+      .populate('vehicleId', 'brand model plateNumber type year')
+      .lean();
+    
     if (!booking) throw new NotFoundError('Booking not found');
-    return booking;
+    
+    // Get scheduled date and time from slot if available, otherwise from scheduledAt
+    let scheduledDate = null;
+    let scheduledTime = null;
+    
+    if (booking.slotId && booking.slotId.date && booking.slotId.time) {
+      scheduledDate = booking.slotId.date;
+      scheduledTime = booking.slotId.time;
+    } else if (booking.scheduledAt) {
+      const scheduledDateTime = new Date(booking.scheduledAt);
+      scheduledDate = scheduledDateTime.toISOString().split('T')[0];
+      scheduledTime = scheduledDateTime.toTimeString().slice(0, 5);
+    }
+
+    // Format vehicle details
+    const vehicleDetails = booking.vehicleId ? {
+      brand: booking.vehicleId.brand,
+      model: booking.vehicleId.model,
+      number: booking.vehicleId.plateNumber,
+      type: booking.vehicleId.type,
+    } : null;
+
+    return {
+      ...booking,
+      scheduledDate,
+      scheduledTime,
+      vehicleDetails,
+    };
   }
 
   async cancelBooking(userId, id) {
