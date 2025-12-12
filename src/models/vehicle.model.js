@@ -32,42 +32,6 @@ const vehicleSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    brand: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 100,
-    },
-    model: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 100,
-    },
-    year: {
-      type: Number,
-      required: true,
-      min: 1900,
-      max: 3000,
-    },
-    plateNumber: {
-      type: String,
-      required: true,
-      trim: true,
-      uppercase: true,
-      maxlength: 20,
-      index: true,
-    },
-    color: {
-      type: String,
-      trim: true,
-      maxlength: 50,
-    },
-    fuelType: {
-      type: String,
-      enum: ['petrol', 'diesel', 'electric', 'hybrid', 'cng', null],
-      default: null,
-    },
     isPrimary: {
       type: Boolean,
       default: false,

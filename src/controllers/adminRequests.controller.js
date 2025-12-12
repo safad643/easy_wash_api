@@ -48,12 +48,12 @@ function getCustomerName(userId) {
 // Helper function to format booking details
 function formatBookingDetail(booking) {
   const customerName = getCustomerName(booking.userId);
-  
+
   // Format scheduled date and time for display
   const scheduledDateTime = new Date(booking.scheduledAt);
   const scheduledDate = scheduledDateTime.toISOString().split('T')[0];
   const scheduledTime = scheduledDateTime.toTimeString().slice(0, 5);
-  
+
   // Format date for display (e.g., "Monday, Nov 10, 2025")
   const dateOptions = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
   const formattedDate = scheduledDateTime.toLocaleDateString('en-US', dateOptions);
@@ -76,13 +76,13 @@ function formatBookingDetail(booking) {
     status: booking.status,
     assignedStaff: booking.staffId
       ? {
-          id: booking.staffId._id.toString(),
-          name: booking.staffId.name,
-          phone: booking.staffId.phone,
-          email: booking.staffId.email,
-          status: booking.staffId.status,
-          skills: booking.staffId.skills || [],
-        }
+        id: booking.staffId._id.toString(),
+        name: booking.staffId.name,
+        phone: booking.staffId.phone,
+        email: booking.staffId.email,
+        status: booking.staffId.status,
+        skills: booking.staffId.skills || [],
+      }
       : null,
     assignedStaffId: booking.staffId?._id?.toString() || null,
     amount: booking.amount,
@@ -92,12 +92,9 @@ function formatBookingDetail(booking) {
     paymentType: booking.paymentType,
     vehicleDetails: booking.vehicleId
       ? {
-          brand: booking.vehicleId.brand,
-          model: booking.vehicleId.model,
-          number: booking.vehicleId.plateNumber,
-          type: booking.vehicleId.type,
-          year: booking.vehicleId.year,
-        }
+        category: booking.vehicleId.category,
+        bodyType: booking.vehicleId.bodyType,
+      }
       : null,
     address: booking.address ? {
       label: booking.address.label,
@@ -284,12 +281,12 @@ class AdminRequestsController {
       const searchConditions = [
         { serviceName: { $regex: escapedSearch, $options: 'i' } },
       ];
-      
+
       // If search looks like an ObjectId, also search by _id
       if (mongoose.Types.ObjectId.isValid(search)) {
         searchConditions.push({ _id: new mongoose.Types.ObjectId(search) });
       }
-      
+
       query.$or = searchConditions;
     }
 
@@ -323,7 +320,7 @@ class AdminRequestsController {
       })
       .populate({
         path: 'vehicleId',
-        select: 'brand model plateNumber year',
+        select: 'category bodyType',
         options: { lean: true }
       })
       .sort({ createdAt: -1 })
@@ -350,11 +347,11 @@ class AdminRequestsController {
       const scheduledDateTime = new Date(booking.scheduledAt);
       const scheduledDate = scheduledDateTime.toISOString().split('T')[0];
       const scheduledTime = scheduledDateTime.toTimeString().slice(0, 5);
-      
+
       // Format date for display (e.g., "Monday, Nov 10, 2025")
       const dateOptions = { weekday: 'long', year: 'numeric', month: 'short', day: 'numeric' };
       const formattedDate = scheduledDateTime.toLocaleDateString('en-US', dateOptions);
-      
+
       return {
         id: booking._id.toString(),
         bookingNumber: booking._id.toString(), // Use MongoDB _id as booking reference
@@ -378,11 +375,9 @@ class AdminRequestsController {
         paymentType: booking.paymentType,
         vehicle: booking.vehicleId
           ? {
-              brand: booking.vehicleId.brand,
-              model: booking.vehicleId.model,
-              plateNumber: booking.vehicleId.plateNumber,
-              year: booking.vehicleId.year,
-            }
+            category: booking.vehicleId.category,
+            bodyType: booking.vehicleId.bodyType,
+          }
           : null,
         address: booking.address ? {
           label: booking.address.label,

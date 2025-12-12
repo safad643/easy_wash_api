@@ -33,12 +33,6 @@ class VehicleService {
     const allowed = [
       'category',
       'bodyType',
-      'brand',
-      'model',
-      'year',
-      'plateNumber',
-      'color',
-      'fuelType',
       'isPrimary',
     ];
 

@@ -31,12 +31,12 @@ class StaffJobService {
       const searchConditions = [
         { serviceName: { $regex: escapedSearch, $options: 'i' } },
       ];
-      
+
       // If search looks like an ObjectId, also search by _id
       if (mongoose.Types.ObjectId.isValid(search)) {
         searchConditions.push({ _id: new mongoose.Types.ObjectId(search) });
       }
-      
+
       // Search by customer name (populate userId first, then filter)
       query.$or = searchConditions;
     }
@@ -65,7 +65,7 @@ class StaffJobService {
       })
       .populate({
         path: 'vehicleId',
-        select: 'brand model plateNumber type year',
+        select: 'category bodyType',
         options: { lean: true }
       })
       .sort({ scheduledAt: 1 }) // Sort by scheduled time (earliest first)
@@ -79,7 +79,7 @@ class StaffJobService {
       const scheduledDateTime = new Date(booking.scheduledAt);
       const scheduledDate = scheduledDateTime.toISOString().split('T')[0];
       const scheduledTime = scheduledDateTime.toTimeString().slice(0, 5);
-      
+
       // Format time for display (12-hour format)
       const [hours, minutes] = scheduledTime.split(':');
       const hour12 = parseInt(hours);
@@ -119,12 +119,9 @@ class StaffJobService {
         paymentType: booking.paymentType,
         vehicleDetails: booking.vehicleId
           ? {
-              brand: booking.vehicleId.brand,
-              model: booking.vehicleId.model,
-              plateNumber: booking.vehicleId.plateNumber,
-              type: booking.vehicleId.type,
-              year: booking.vehicleId.year,
-            }
+            category: booking.vehicleId.category,
+            bodyType: booking.vehicleId.bodyType,
+          }
           : null,
         address: booking.address,
         coordinates: booking.coordinates,
@@ -154,7 +151,7 @@ class StaffJobService {
       })
       .populate({
         path: 'vehicleId',
-        select: 'brand model plateNumber type year',
+        select: 'category bodyType',
         options: { lean: true }
       })
       .lean()
@@ -215,12 +212,9 @@ class StaffJobService {
       paymentType: booking.paymentType,
       vehicleDetails: booking.vehicleId
         ? {
-            brand: booking.vehicleId.brand,
-            model: booking.vehicleId.model,
-            plateNumber: booking.vehicleId.plateNumber,
-            type: booking.vehicleId.type,
-            year: booking.vehicleId.year,
-          }
+          category: booking.vehicleId.category,
+          bodyType: booking.vehicleId.bodyType,
+        }
         : null,
       address: booking.address,
       coordinates: booking.coordinates || null,
@@ -256,7 +250,7 @@ class StaffJobService {
 
     // Update booking status
     booking.status = 'completed';
-    
+
     // Update payment status if payment was received
     if (paymentReceived === true) {
       booking.paymentStatus = 'paid';
@@ -396,11 +390,11 @@ class StaffJobService {
       const searchConditions = [
         { serviceName: { $regex: escapedSearch, $options: 'i' } },
       ];
-      
+
       if (mongoose.Types.ObjectId.isValid(search)) {
         searchConditions.push({ _id: new mongoose.Types.ObjectId(search) });
       }
-      
+
       query.$or = searchConditions;
     }
 
@@ -425,7 +419,7 @@ class StaffJobService {
       })
       .populate({
         path: 'vehicleId',
-        select: 'brand model plateNumber type',
+        select: 'category bodyType',
         options: { lean: true }
       })
       .sort({ scheduledAt: -1 }) // Most recent first

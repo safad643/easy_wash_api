@@ -55,14 +55,14 @@ class BookingService {
             (p) => p.vehicleType && p.vehicleType.toLowerCase() === vehicleBodyType.toLowerCase()
           );
         }
-        
+
         // If no bodyType match, try category match
         if (!matchingPricing && vehicleCategory) {
           matchingPricing = service.pricing.find(
             (p) => p.vehicleType && p.vehicleType.toLowerCase() === vehicleCategory.toLowerCase()
           );
         }
-        
+
         if (matchingPricing) {
           servicePrice = matchingPricing.price || 0;
         } else {
@@ -150,7 +150,7 @@ class BookingService {
     const dateKey = day.toISOString().slice(0, 10);
 
     // Fetch only available slots (status='available') for this date
-    const availableSlots = await Slot.find({ 
+    const availableSlots = await Slot.find({
       date: dateKey,
       status: 'available',
     })
@@ -265,7 +265,7 @@ class BookingService {
         phone: address.phone || '',
       };
     }
-    
+
     if (!addressObject || !addressObject.line1 || !addressObject.city || !addressObject.state || !addressObject.pincode) {
       throw new BadRequestError('Address is required with line1, city, state, and pincode');
     }
@@ -312,7 +312,7 @@ class BookingService {
     const total = await Booking.countDocuments(query);
     const bookings = await Booking.find(query)
       .populate('slotId', 'date time')
-      .populate('vehicleId', 'brand model plateNumber type year')
+      .populate('vehicleId', 'category bodyType')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -323,7 +323,7 @@ class BookingService {
       // Get scheduled date and time from slot if available, otherwise from scheduledAt
       let scheduledDate = null;
       let scheduledTime = null;
-      
+
       if (booking.slotId && booking.slotId.date && booking.slotId.time) {
         scheduledDate = booking.slotId.date;
         scheduledTime = booking.slotId.time;
@@ -338,10 +338,8 @@ class BookingService {
         scheduledDate,
         scheduledTime,
         vehicleDetails: booking.vehicleId ? {
-          brand: booking.vehicleId.brand,
-          model: booking.vehicleId.model,
-          number: booking.vehicleId.plateNumber,
-          type: booking.vehicleId.type,
+          category: booking.vehicleId.category,
+          bodyType: booking.vehicleId.bodyType,
         } : null,
       };
     });
@@ -358,15 +356,15 @@ class BookingService {
   async getBooking(userId, id) {
     const booking = await Booking.findOne({ _id: id, userId })
       .populate('slotId', 'date time')
-      .populate('vehicleId', 'brand model plateNumber type year')
+      .populate('vehicleId', 'category bodyType')
       .lean();
-    
+
     if (!booking) throw new NotFoundError('Booking not found');
-    
+
     // Get scheduled date and time from slot if available, otherwise from scheduledAt
     let scheduledDate = null;
     let scheduledTime = null;
-    
+
     if (booking.slotId && booking.slotId.date && booking.slotId.time) {
       scheduledDate = booking.slotId.date;
       scheduledTime = booking.slotId.time;
@@ -378,10 +376,8 @@ class BookingService {
 
     // Format vehicle details
     const vehicleDetails = booking.vehicleId ? {
-      brand: booking.vehicleId.brand,
-      model: booking.vehicleId.model,
-      number: booking.vehicleId.plateNumber,
-      type: booking.vehicleId.type,
+      category: booking.vehicleId.category,
+      bodyType: booking.vehicleId.bodyType,
     } : null;
 
     return {
