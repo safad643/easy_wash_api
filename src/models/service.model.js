@@ -69,7 +69,6 @@ const serviceSchema = new mongoose.Schema(
 );
 
 serviceSchema.index({ name: 'text', description: 'text' });
-serviceSchema.index({ category: 1 });
 serviceSchema.index({ 'pricing.vehicleType': 1 });
 
 module.exports = mongoose.model('Service', serviceSchema);

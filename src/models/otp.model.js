@@ -29,17 +29,13 @@ const otpSchema = new mongoose.Schema({
 });
 
 // Validate that at least one of phone or email is provided
-otpSchema.pre('validate', function(next) {
+otpSchema.pre('validate', function (next) {
   if (!this.phone && !this.email) {
     next(new Error('Either phone or email must be provided'));
   } else {
     next();
   }
 });
-
-// Index for faster lookups
-otpSchema.index({ phone: 1 });
-otpSchema.index({ email: 1 });
 
 // TTL index - auto-delete expired OTPs
 otpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });

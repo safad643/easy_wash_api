@@ -58,8 +58,4 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index for faster lookups
-userSchema.index({ googleId: 1 });
-userSchema.index({ phone: 1 });
-
 module.exports = mongoose.model('User', userSchema);
