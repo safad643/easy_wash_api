@@ -15,6 +15,7 @@ const staffRoutes = require('./routes/staff.routes');
 const staffJobRoutes = require('./routes/staffJob.routes');
 const ordersRoutes = require('./routes/orders.routes');
 const adminOrdersRoutes = require('./routes/admin.orders.routes');
+const posterRoutes = require('./routes/poster.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const cors = require('cors');
 
@@ -36,7 +37,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);  
+app.use('/api/products', productRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/addresses', addressRoutes);
@@ -50,6 +51,8 @@ app.use('/api/checkout', checkoutRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/admin/orders', adminOrdersRoutes);
+app.use('/api/posters', posterRoutes.publicRouter);
+app.use('/api/admin/posters', posterRoutes.adminRouter);
 
 app.use((req, res) => {
   res.status(404).json({
