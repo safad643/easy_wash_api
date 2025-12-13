@@ -13,7 +13,6 @@ const checkoutRoutes = require('./routes/checkout.routes');
 const categoryRoutes = require('./routes/category.routes');
 const staffRoutes = require('./routes/staff.routes');
 const staffJobRoutes = require('./routes/staffJob.routes');
-const bannerRoutes = require('./routes/banner.routes');
 const ordersRoutes = require('./routes/orders.routes');
 const adminOrdersRoutes = require('./routes/admin.orders.routes');
 const errorHandler = require('./middlewares/error.middleware');
@@ -49,7 +48,6 @@ app.use('/api/admin/staff', staffRoutes);
 app.use('/api/staff/jobs', staffJobRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/categories', categoryRoutes);
-app.use('/api/admin/banners', bannerRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/admin/orders', adminOrdersRoutes);
 
