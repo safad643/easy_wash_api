@@ -36,40 +36,17 @@ class CheckoutService {
 
   async createServiceBookingSession(userId, { bookingData, paymentType, amount }) {
     // Validate booking data
-    if (!bookingData.serviceId || !bookingData.vehicleId || !bookingData.scheduledAt) {
-      throw new BadRequestError('serviceId, vehicleId, and scheduledAt are required in bookingData');
+    if (!bookingData.serviceId || !bookingData.vehicleId || !bookingData.slotId) {
+      throw new BadRequestError('serviceId, vehicleId, and slotId are required in bookingData');
     }
 
-    // Parse scheduledAt to check slot availability
-    let scheduledAt;
-    if (bookingData.scheduledAt instanceof Date) {
-      scheduledAt = bookingData.scheduledAt;
-    } else if (typeof bookingData.scheduledAt === 'string') {
-      scheduledAt = new Date(bookingData.scheduledAt);
-    } else {
-      throw new BadRequestError('Invalid scheduledAt format');
-    }
+    // Look up slot by ID to validate availability
+    const slot = await Slot.findById(bookingData.slotId);
 
-    if (isNaN(scheduledAt.getTime())) {
-      throw new BadRequestError('Invalid scheduledAt date');
-    }
-
-    // IMPORTANT: Check if slot is still available before processing payment
-    // Use local date/time to match how slots are stored (slots are created in local timezone)
-    // When Date is created from UTC ISO string, getHours/getDate return local timezone values
-    const year = scheduledAt.getFullYear();
-    const month = String(scheduledAt.getMonth() + 1).padStart(2, '0');
-    const day = String(scheduledAt.getDate()).padStart(2, '0');
-    const dateKey = `${year}-${month}-${day}`;
-    const hours = String(scheduledAt.getHours()).padStart(2, '0');
-    const minutes = String(scheduledAt.getMinutes()).padStart(2, '0');
-    const timeKey = `${hours}:${minutes}`;
-    const slot = await Slot.findOne({ date: dateKey, time: timeKey });
-    
     if (!slot) {
-      throw new BadRequestError('Slot not found for the selected date and time');
+      throw new BadRequestError('Slot not found');
     }
-    
+
     if (slot.status !== 'available') {
       throw new BadRequestError('This slot has been booked by another user. Please select a different slot.');
     }
@@ -98,7 +75,7 @@ class CheckoutService {
     const timestampStr = String(Date.now());
     const randomStr = crypto.randomBytes(2).toString('hex');
     const receipt = `RCP${timestampStr.slice(-8)}${randomStr}`;
-    
+
     // Store booking data in notes (will be used to create booking after payment)
     const orderOptions = {
       amount: Math.round(amount * 100), // Convert to paise
@@ -114,7 +91,7 @@ class CheckoutService {
           serviceId: bookingData.serviceId,
           serviceName: bookingData.serviceName,
           vehicleId: bookingData.vehicleId,
-          scheduledAt: scheduledAt.toISOString(),
+          slotId: bookingData.slotId,
           addressId: bookingData.addressId,
           address: bookingData.address,
           addOns: bookingData.addOns || [],
@@ -238,7 +215,7 @@ class CheckoutService {
     // Verify payment with Razorpay API
     try {
       const payment = await this.razorpay.payments.fetch(razorpay_payment_id);
-      
+
       if (payment.status !== 'captured' && payment.status !== 'authorized') {
         throw new BadRequestError('Payment not completed');
       }
@@ -286,21 +263,13 @@ class CheckoutService {
       }
 
       // IMPORTANT: Double-check slot availability before marking as paid
-      // Use local date/time to match how slots are stored (slots are created in local timezone)
-      const scheduledAtDate = new Date(booking.scheduledAt);
-      const year = scheduledAtDate.getFullYear();
-      const month = String(scheduledAtDate.getMonth() + 1).padStart(2, '0');
-      const day = String(scheduledAtDate.getDate()).padStart(2, '0');
-      const dateKey = `${year}-${month}-${day}`;
-      const hours = String(scheduledAtDate.getHours()).padStart(2, '0');
-      const minutes = String(scheduledAtDate.getMinutes()).padStart(2, '0');
-      const timeKey = `${hours}:${minutes}`;
-      const slot = await Slot.findOne({ date: dateKey, time: timeKey });
-      
+      // The booking already has the slotId, so look up directly
+      const slot = await Slot.findById(booking.slotId);
+
       if (!slot) {
         throw new BadRequestError('Slot not found for this booking');
       }
-      
+
       if (slot.status !== 'available') {
         throw new BadRequestError('This slot has been booked by another user. Please select a different slot.');
       }
@@ -402,21 +371,13 @@ class CheckoutService {
     if (!booking) throw new NotFoundError('No pending booking found to mark paid');
 
     // IMPORTANT: Double-check slot availability before marking as paid
-    // Use local date/time to match how slots are stored (slots are created in local timezone)
-    const scheduledAtDate = new Date(booking.scheduledAt);
-    const year = scheduledAtDate.getFullYear();
-    const month = String(scheduledAtDate.getMonth() + 1).padStart(2, '0');
-    const day = String(scheduledAtDate.getDate()).padStart(2, '0');
-    const dateKey = `${year}-${month}-${day}`;
-    const hours = String(scheduledAtDate.getHours()).padStart(2, '0');
-    const minutes = String(scheduledAtDate.getMinutes()).padStart(2, '0');
-    const timeKey = `${hours}:${minutes}`;
-    const slot = await Slot.findOne({ date: dateKey, time: timeKey });
-    
+    // The booking already has the slotId, so look up directly
+    const slot = await Slot.findById(booking.slotId);
+
     if (!slot) {
       throw new BadRequestError('Slot not found for this booking');
     }
-    
+
     if (slot.status !== 'available') {
       throw new BadRequestError('This slot has been booked by another user. Please select a different slot.');
     }

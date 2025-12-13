@@ -4,23 +4,6 @@ const Vehicle = require('../models/vehicle.model');
 const Slot = require('../models/slot.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
 
-
-function parseSchedule({ scheduledAt, scheduledDate, scheduledTime }) {
-  if (scheduledAt) {
-    const dt = new Date(scheduledAt);
-    if (isNaN(dt.getTime())) throw new BadRequestError('Invalid scheduledAt');
-    return dt;
-  }
-  if (scheduledDate && scheduledTime) {
-    const [h, m] = String(scheduledTime).split(':');
-    const dt = new Date(scheduledDate);
-    if (isNaN(dt.getTime())) throw new BadRequestError('Invalid scheduledDate');
-    dt.setHours(Number(h), Number(m), 0, 0);
-    return dt;
-  }
-  throw new BadRequestError('Scheduling information is required');
-}
-
 class BookingService {
   async previewPricing({ serviceId, vehicleId, addOns = [], paymentType = 'full', couponCode }) {
     if (!serviceId) {
@@ -200,6 +183,7 @@ class BookingService {
         }
 
         return {
+          id: String(slot._id),
           startTime: slot.time,
           endTime: endTimeStr,
           isAvailable: true, // All slots returned are available
@@ -210,7 +194,24 @@ class BookingService {
   }
 
   async createBooking(userId, input) {
-    const scheduledAt = parseSchedule(input);
+    // Validate slotId is provided
+    if (!input.slotId) {
+      throw new BadRequestError('slotId is required');
+    }
+
+    // Look up the slot by ID
+    const slot = await Slot.findById(input.slotId);
+    if (!slot) {
+      throw new BadRequestError('Slot not found');
+    }
+    if (slot.status !== 'available') {
+      throw new BadRequestError('Selected slot is not available');
+    }
+
+    // Derive scheduledAt from slot date and time
+    const [hours, minutes] = slot.time.split(':').map(Number);
+    const scheduledAt = new Date(slot.date);
+    scheduledAt.setHours(hours, minutes, 0, 0);
 
     const preview = await this.previewPricing({
       serviceId: input.serviceId,
@@ -219,26 +220,6 @@ class BookingService {
       paymentType: input.paymentType,
       couponCode: input.couponCode,
     });
-
-    // Extract date and time from scheduledAt (using local time to match slot storage)
-    // Slots are stored in local timezone, so we need to use local time for lookup
-    // When Date is created from UTC ISO string, getHours/getDate return local timezone values
-    const year = scheduledAt.getFullYear();
-    const month = String(scheduledAt.getMonth() + 1).padStart(2, '0');
-    const day = String(scheduledAt.getDate()).padStart(2, '0');
-    const dateKey = `${year}-${month}-${day}`;
-    const hours = String(scheduledAt.getHours()).padStart(2, '0');
-    const minutes = String(scheduledAt.getMinutes()).padStart(2, '0');
-    const timeKey = `${hours}:${minutes}`;
-
-    // Check if slot exists and is available
-    const slot = await Slot.findOne({ date: dateKey, time: timeKey });
-    if (!slot) {
-      throw new BadRequestError('Slot not found for the selected date and time');
-    }
-    if (slot.status !== 'available') {
-      throw new BadRequestError('Selected slot is not available');
-    }
 
     // Build full address object from input
     let addressObject = null;
