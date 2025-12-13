@@ -55,8 +55,15 @@ class CheckoutService {
     }
 
     // IMPORTANT: Check if slot is still available before processing payment
-    const dateKey = scheduledAt.toISOString().slice(0, 10);
-    const timeKey = scheduledAt.toTimeString().slice(0, 5);
+    // Use local date/time to match how slots are stored (slots are created in local timezone)
+    // When Date is created from UTC ISO string, getHours/getDate return local timezone values
+    const year = scheduledAt.getFullYear();
+    const month = String(scheduledAt.getMonth() + 1).padStart(2, '0');
+    const day = String(scheduledAt.getDate()).padStart(2, '0');
+    const dateKey = `${year}-${month}-${day}`;
+    const hours = String(scheduledAt.getHours()).padStart(2, '0');
+    const minutes = String(scheduledAt.getMinutes()).padStart(2, '0');
+    const timeKey = `${hours}:${minutes}`;
     const slot = await Slot.findOne({ date: dateKey, time: timeKey });
     
     if (!slot) {
@@ -279,8 +286,15 @@ class CheckoutService {
       }
 
       // IMPORTANT: Double-check slot availability before marking as paid
-      const dateKey = booking.scheduledAt.toISOString().slice(0, 10);
-      const timeKey = booking.scheduledAt.toTimeString().slice(0, 5);
+      // Use local date/time to match how slots are stored (slots are created in local timezone)
+      const scheduledAtDate = new Date(booking.scheduledAt);
+      const year = scheduledAtDate.getFullYear();
+      const month = String(scheduledAtDate.getMonth() + 1).padStart(2, '0');
+      const day = String(scheduledAtDate.getDate()).padStart(2, '0');
+      const dateKey = `${year}-${month}-${day}`;
+      const hours = String(scheduledAtDate.getHours()).padStart(2, '0');
+      const minutes = String(scheduledAtDate.getMinutes()).padStart(2, '0');
+      const timeKey = `${hours}:${minutes}`;
       const slot = await Slot.findOne({ date: dateKey, time: timeKey });
       
       if (!slot) {
@@ -388,8 +402,15 @@ class CheckoutService {
     if (!booking) throw new NotFoundError('No pending booking found to mark paid');
 
     // IMPORTANT: Double-check slot availability before marking as paid
-    const dateKey = booking.scheduledAt.toISOString().slice(0, 10);
-    const timeKey = booking.scheduledAt.toTimeString().slice(0, 5);
+    // Use local date/time to match how slots are stored (slots are created in local timezone)
+    const scheduledAtDate = new Date(booking.scheduledAt);
+    const year = scheduledAtDate.getFullYear();
+    const month = String(scheduledAtDate.getMonth() + 1).padStart(2, '0');
+    const day = String(scheduledAtDate.getDate()).padStart(2, '0');
+    const dateKey = `${year}-${month}-${day}`;
+    const hours = String(scheduledAtDate.getHours()).padStart(2, '0');
+    const minutes = String(scheduledAtDate.getMinutes()).padStart(2, '0');
+    const timeKey = `${hours}:${minutes}`;
     const slot = await Slot.findOne({ date: dateKey, time: timeKey });
     
     if (!slot) {

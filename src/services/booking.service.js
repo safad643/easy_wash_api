@@ -174,7 +174,12 @@ class BookingService {
     }).select('scheduledAt').lean().exec();
 
     const bookedTimes = new Set(
-      existingBookings.map(b => new Date(b.scheduledAt).toTimeString().slice(0, 5))
+      existingBookings.map(b => {
+        const dt = new Date(b.scheduledAt);
+        const hours = String(dt.getHours()).padStart(2, '0');
+        const minutes = String(dt.getMinutes()).padStart(2, '0');
+        return `${hours}:${minutes}`;
+      })
     );
 
     // Filter out slots that are already booked by PAID bookings
@@ -215,9 +220,16 @@ class BookingService {
       couponCode: input.couponCode,
     });
 
-    // Extract date and time from scheduledAt
-    const dateKey = scheduledAt.toISOString().slice(0, 10);
-    const timeKey = scheduledAt.toTimeString().slice(0, 5); // HH:MM format
+    // Extract date and time from scheduledAt (using local time to match slot storage)
+    // Slots are stored in local timezone, so we need to use local time for lookup
+    // When Date is created from UTC ISO string, getHours/getDate return local timezone values
+    const year = scheduledAt.getFullYear();
+    const month = String(scheduledAt.getMonth() + 1).padStart(2, '0');
+    const day = String(scheduledAt.getDate()).padStart(2, '0');
+    const dateKey = `${year}-${month}-${day}`;
+    const hours = String(scheduledAt.getHours()).padStart(2, '0');
+    const minutes = String(scheduledAt.getMinutes()).padStart(2, '0');
+    const timeKey = `${hours}:${minutes}`;
 
     // Check if slot exists and is available
     const slot = await Slot.findOne({ date: dateKey, time: timeKey });
