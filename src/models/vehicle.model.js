@@ -10,26 +10,16 @@ const vehicleSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['car', 'bike'],
       required: true,
+      trim: true,
+      lowercase: true,
       index: true,
     },
     bodyType: {
       type: String,
-      enum: [
-        'sedan',
-        'suv',
-        'hatchback',
-        'luxury',
-        'super-bike',
-        'sports-bike',
-        'cruiser',
-        'scooty',
-        // Legacy values retained temporarily for backward compatibility
-        'scooter',
-        'motorcycle',
-      ],
       required: true,
+      trim: true,
+      lowercase: true,
       index: true,
     },
     isPrimary: {

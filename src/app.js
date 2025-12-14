@@ -17,6 +17,8 @@ const ordersRoutes = require('./routes/orders.routes');
 const adminOrdersRoutes = require('./routes/admin.orders.routes');
 const posterRoutes = require('./routes/poster.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const settingsRoutes = require('./routes/settings.routes');
+const vehicleTypeRoutes = require('./routes/vehicleType.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const cors = require('cors');
 
@@ -55,6 +57,10 @@ app.use('/api/admin/orders', adminOrdersRoutes);
 app.use('/api/posters', posterRoutes.publicRouter);
 app.use('/api/admin/posters', posterRoutes.adminRouter);
 app.use('/api/admin/dashboard', dashboardRoutes);
+app.use('/api', settingsRoutes.publicRouter);
+app.use('/api/admin/settings', settingsRoutes.adminRouter);
+app.use('/api/vehicle-types', vehicleTypeRoutes.publicRouter);
+app.use('/api/admin/vehicle-types', vehicleTypeRoutes.adminRouter);
 
 app.use((req, res) => {
   res.status(404).json({

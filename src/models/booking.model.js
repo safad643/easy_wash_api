@@ -14,10 +14,11 @@ const bookingSchema = new mongoose.Schema({
   serviceName: {
     type: String,
   },
-  vehicleId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Vehicle',
-    required: true,
+  // Vehicle snapshot - stored at booking time for historical accuracy
+  vehicle: {
+    vehicleId: { type: mongoose.Schema.Types.ObjectId }, // Original vehicle ID for analytics
+    category: { type: String, required: true, trim: true },
+    bodyType: { type: String, required: true, trim: true },
   },
   slotId: {
     type: mongoose.Schema.Types.ObjectId,

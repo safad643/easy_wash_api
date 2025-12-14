@@ -63,11 +63,6 @@ class StaffJobService {
         select: 'name email phone avatar',
         options: { lean: true }
       })
-      .populate({
-        path: 'vehicleId',
-        select: 'category bodyType',
-        options: { lean: true }
-      })
       .sort({ scheduledAt: 1 }) // Sort by scheduled time (earliest first)
       .skip(skip)
       .limit(parseInt(limit))
@@ -117,10 +112,10 @@ class StaffJobService {
         totalAmount: booking.totalAmount || booking.amount || 0,
         paymentStatus: booking.paymentStatus,
         paymentType: booking.paymentType,
-        vehicleDetails: booking.vehicleId
+        vehicleDetails: booking.vehicle
           ? {
-            category: booking.vehicleId.category,
-            bodyType: booking.vehicleId.bodyType,
+            category: booking.vehicle.category,
+            bodyType: booking.vehicle.bodyType,
           }
           : null,
         address: booking.address,
@@ -147,11 +142,6 @@ class StaffJobService {
       .populate({
         path: 'userId',
         select: 'name email phone avatar',
-        options: { lean: true }
-      })
-      .populate({
-        path: 'vehicleId',
-        select: 'category bodyType',
         options: { lean: true }
       })
       .lean()
@@ -210,10 +200,10 @@ class StaffJobService {
       advanceAmount: booking.advanceAmount || 0,
       paymentStatus: booking.paymentStatus,
       paymentType: booking.paymentType,
-      vehicleDetails: booking.vehicleId
+      vehicleDetails: booking.vehicle
         ? {
-          category: booking.vehicleId.category,
-          bodyType: booking.vehicleId.bodyType,
+          category: booking.vehicle.category,
+          bodyType: booking.vehicle.bodyType,
         }
         : null,
       address: booking.address,
@@ -415,11 +405,6 @@ class StaffJobService {
       .populate({
         path: 'userId',
         select: 'name email phone',
-        options: { lean: true }
-      })
-      .populate({
-        path: 'vehicleId',
-        select: 'category bodyType',
         options: { lean: true }
       })
       .sort({ scheduledAt: -1 }) // Most recent first

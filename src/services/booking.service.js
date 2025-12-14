@@ -5,7 +5,7 @@ const Slot = require('../models/slot.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
 
 class BookingService {
-  async previewPricing({ serviceId, vehicleId, addOns = [], paymentType = 'full', couponCode }) {
+  async previewPricing({ serviceId, vehicleId, addOns = [], paymentType = 'full' }) {
     if (!serviceId) {
       throw new BadRequestError('serviceId is required for pricing');
     }
@@ -75,7 +75,7 @@ class BookingService {
     }
 
     const addOnsTotal = 0; // placeholder until add-ons are modeled
-    const discount = 0; // placeholder until coupons are modeled
+    const discount = 0;
     const subTotal = servicePrice + addOnsTotal - discount;
     const taxAmount = Math.round(subTotal * 0.0); // add tax if needed
     const totalAmount = subTotal + taxAmount;
@@ -88,7 +88,6 @@ class BookingService {
       taxAmount,
       totalAmount,
       ...(advanceAmount !== undefined ? { advanceAmount } : {}),
-      ...(couponCode ? { couponApplied: { code: couponCode, discount } } : {}),
     };
   }
 
@@ -218,7 +217,6 @@ class BookingService {
       vehicleId: input.vehicleId,
       addOns: input.addOns,
       paymentType: input.paymentType,
-      couponCode: input.couponCode,
     });
 
     // Build full address object from input
@@ -263,11 +261,25 @@ class BookingService {
       throw new BadRequestError('Address is required with line1, city, state, and pincode');
     }
 
+    // Fetch vehicle and create snapshot for historical accuracy
+    if (!input.vehicleId) {
+      throw new BadRequestError('vehicleId is required');
+    }
+    const vehicleDoc = await Vehicle.findById(input.vehicleId).lean();
+    if (!vehicleDoc) {
+      throw new BadRequestError('Vehicle not found');
+    }
+    const vehicleSnapshot = {
+      vehicleId: vehicleDoc._id,
+      category: vehicleDoc.category,
+      bodyType: vehicleDoc.bodyType,
+    };
+
     const booking = await Booking.create({
       userId,
       serviceId: input.serviceId,
       serviceName: input.serviceName,
-      vehicleId: input.vehicleId,
+      vehicle: vehicleSnapshot,
       slotId: slot._id,
       address: addressObject,
       scheduledAt,
@@ -305,7 +317,6 @@ class BookingService {
     const total = await Booking.countDocuments(query);
     const bookings = await Booking.find(query)
       .populate('slotId', 'date time')
-      .populate('vehicleId', 'category bodyType')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -330,9 +341,9 @@ class BookingService {
         ...booking,
         scheduledDate,
         scheduledTime,
-        vehicleDetails: booking.vehicleId ? {
-          category: booking.vehicleId.category,
-          bodyType: booking.vehicleId.bodyType,
+        vehicleDetails: booking.vehicle ? {
+          category: booking.vehicle.category,
+          bodyType: booking.vehicle.bodyType,
         } : null,
       };
     });
@@ -349,7 +360,6 @@ class BookingService {
   async getBooking(userId, id) {
     const booking = await Booking.findOne({ _id: id, userId })
       .populate('slotId', 'date time')
-      .populate('vehicleId', 'category bodyType')
       .lean();
 
     if (!booking) throw new NotFoundError('Booking not found');
@@ -367,10 +377,10 @@ class BookingService {
       scheduledTime = scheduledDateTime.toTimeString().slice(0, 5);
     }
 
-    // Format vehicle details
-    const vehicleDetails = booking.vehicleId ? {
-      category: booking.vehicleId.category,
-      bodyType: booking.vehicleId.bodyType,
+    // Format vehicle details from embedded snapshot
+    const vehicleDetails = booking.vehicle ? {
+      category: booking.vehicle.category,
+      bodyType: booking.vehicle.bodyType,
     } : null;
 
     return {

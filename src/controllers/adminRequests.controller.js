@@ -90,10 +90,10 @@ function formatBookingDetail(booking) {
     advanceAmount: booking.advanceAmount,
     paymentStatus: booking.paymentStatus,
     paymentType: booking.paymentType,
-    vehicleDetails: booking.vehicleId
+    vehicleDetails: booking.vehicle
       ? {
-        category: booking.vehicleId.category,
-        bodyType: booking.vehicleId.bodyType,
+        category: booking.vehicle.category,
+        bodyType: booking.vehicle.bodyType,
       }
       : null,
     address: booking.address ? {
@@ -318,11 +318,6 @@ class AdminRequestsController {
         select: 'name phone',
         options: { lean: true }
       })
-      .populate({
-        path: 'vehicleId',
-        select: 'category bodyType',
-        options: { lean: true }
-      })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
@@ -373,10 +368,10 @@ class AdminRequestsController {
         advanceAmount: booking.advanceAmount,
         paymentStatus: booking.paymentStatus,
         paymentType: booking.paymentType,
-        vehicle: booking.vehicleId
+        vehicle: booking.vehicle
           ? {
-            category: booking.vehicleId.category,
-            bodyType: booking.vehicleId.bodyType,
+            category: booking.vehicle.category,
+            bodyType: booking.vehicle.bodyType,
           }
           : null,
         address: booking.address ? {
@@ -421,7 +416,6 @@ class AdminRequestsController {
         select: 'name phone email status skills',
         options: { lean: true }
       })
-      .populate('vehicleId')
       .lean()
       .exec();
 
@@ -477,7 +471,6 @@ class AdminRequestsController {
         select: 'name phone email status skills',
         options: { lean: true }
       })
-      .populate('vehicleId')
       .lean()
       .exec();
 
@@ -518,7 +511,6 @@ class AdminRequestsController {
         select: 'name phone email status skills',
         options: { lean: true }
       })
-      .populate('vehicleId')
       .lean()
       .exec();
 
@@ -553,7 +545,6 @@ class AdminRequestsController {
         select: 'name phone email status skills',
         options: { lean: true }
       })
-      .populate('vehicleId')
       .lean()
       .exec();
 

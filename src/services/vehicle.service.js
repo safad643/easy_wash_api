@@ -1,5 +1,6 @@
 const Vehicle = require('../models/vehicle.model');
-const { NotFoundError, UnauthorizedError } = require('../utils/errors');
+const VehicleType = require('../models/vehicleType.model');
+const { NotFoundError, UnauthorizedError, BadRequestError } = require('../utils/errors');
 
 class VehicleService {
   async listUserVehicles(userId) {
@@ -7,11 +8,23 @@ class VehicleService {
   }
 
   async createVehicle(userId, input) {
+    // Validate vehicle type exists and is active
+    const typeExists = await VehicleType.findOne({
+      category: input.category,
+      bodyType: input.bodyType.toLowerCase(),
+      isActive: true,
+    });
+
+    if (!typeExists) {
+      throw new BadRequestError('Invalid vehicle type. Please select a valid vehicle type.');
+    }
+
     const count = await Vehicle.countDocuments({ user: userId });
 
     const vehicle = await Vehicle.create({
       user: userId,
       ...input,
+      bodyType: input.bodyType.toLowerCase(),
       isPrimary: count === 0 ? true : Boolean(input.isPrimary),
     });
 
@@ -30,14 +43,10 @@ class VehicleService {
     if (!vehicle) throw new NotFoundError('Vehicle not found');
     if (String(vehicle.user) !== String(userId)) throw new UnauthorizedError('Not allowed');
 
-    const allowed = [
-      'category',
-      'bodyType',
-      'isPrimary',
-    ];
-
-    for (const key of Object.keys(updates)) {
-      if (allowed.includes(key)) vehicle[key] = updates[key];
+    // Only allow updating isPrimary - category and bodyType cannot be changed
+    // Users must delete and re-add the vehicle to change these
+    if (updates.isPrimary !== undefined) {
+      vehicle.isPrimary = updates.isPrimary;
     }
 
     await vehicle.save();

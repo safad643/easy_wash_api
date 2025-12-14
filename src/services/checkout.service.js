@@ -58,7 +58,6 @@ class CheckoutService {
       vehicleId: bookingData.vehicleId,
       addOns: bookingData.addOns || [],
       paymentType: paymentType || 'full',
-      couponCode: bookingData.couponCode,
     });
 
     const payableAmount = paymentType === 'advance' && preview.advanceAmount
@@ -96,7 +95,6 @@ class CheckoutService {
           address: bookingData.address,
           addOns: bookingData.addOns || [],
           coordinates: bookingData.coordinates,
-          couponCode: bookingData.couponCode,
         }),
       },
     };
@@ -366,7 +364,6 @@ class CheckoutService {
 
     // Fallback to old behavior for backward compatibility
     const booking = await Booking.findOne({ userId, paymentStatus: 'pending' })
-      .populate('vehicleId')
       .sort({ createdAt: -1 });
     if (!booking) throw new NotFoundError('No pending booking found to mark paid');
 

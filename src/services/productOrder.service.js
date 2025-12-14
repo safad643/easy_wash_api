@@ -2,6 +2,7 @@ const ProductOrder = require('../models/productOrder.model');
 const Product = require('../models/product.model');
 const Address = require('../models/address.model');
 const Cart = require('../models/cart.model');
+const CompanyDetails = require('../models/companyDetails.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
 
 const escapeRegex = (text = '') => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -57,11 +58,11 @@ const formatOrderForAdmin = (orderDoc) => {
   const customer =
     customerSource && (customerSource._id || customerSource.id || customerSource.name)
       ? {
-          id: customerSource._id ? String(customerSource._id) : customerSource.id ? String(customerSource.id) : undefined,
-          name: customerSource.name,
-          email: customerSource.email,
-          phone: customerSource.phone,
-        }
+        id: customerSource._id ? String(customerSource._id) : customerSource.id ? String(customerSource.id) : undefined,
+        name: customerSource.name,
+        email: customerSource.email,
+        phone: customerSource.phone,
+      }
       : undefined;
 
   return {
@@ -85,6 +86,7 @@ const formatOrderForAdmin = (orderDoc) => {
       addedBy: note.addedBy,
       addedAt: note.addedAt,
     })),
+    invoiceDetails: plain.invoiceDetails || null,
     customer,
   };
 };
@@ -190,6 +192,28 @@ class ProductOrderService {
       addressId,
     } = await this.prepareOrderData(userId, payload);
 
+    // Fetch current company details for invoice snapshot
+    let invoiceDetails = null;
+    try {
+      let companyDetails = await CompanyDetails.findOne();
+      if (!companyDetails) {
+        // Create with defaults if not exists
+        companyDetails = await CompanyDetails.create({});
+      }
+      invoiceDetails = {
+        companyName: companyDetails.companyName,
+        address: companyDetails.address,
+        city: companyDetails.city,
+        phone: companyDetails.phone,
+        email: companyDetails.email,
+        gst: companyDetails.gst,
+        website: companyDetails.website,
+      };
+    } catch (err) {
+      console.error('Failed to fetch company details for invoice:', err);
+      // Continue without invoice details - use fallback on frontend
+    }
+
     const order = await ProductOrder.create({
       userId,
       items: normalizedItems,
@@ -201,14 +225,15 @@ class ProductOrderService {
       paymentMethod,
       paymentStatus: paymentMethod === 'cod' ? 'pending' : 'paid',
       deliveryAddress: addressSnapshot,
+      invoiceDetails,
       notes: notes
         ? [
-            {
-              note: notes,
-              addedBy: 'customer',
-              addedAt: new Date(),
-            },
-          ]
+          {
+            note: notes,
+            addedBy: 'customer',
+            addedAt: new Date(),
+          },
+        ]
         : undefined,
     });
 

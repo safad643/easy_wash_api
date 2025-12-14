@@ -14,6 +14,20 @@ const addressSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Invoice details snapshot - captures company info at order time for invoice immutability
+const invoiceDetailsSchema = new mongoose.Schema(
+  {
+    companyName: { type: String, trim: true },
+    address: { type: String, trim: true },
+    city: { type: String, trim: true },
+    phone: { type: String, trim: true },
+    email: { type: String, trim: true },
+    gst: { type: String, trim: true },
+    website: { type: String, trim: true },
+  },
+  { _id: false }
+);
+
 const itemSchema = new mongoose.Schema(
   {
     productId: {
@@ -124,6 +138,9 @@ const productOrderSchema = new mongoose.Schema(
     trackingNumber: {
       type: String,
       trim: true,
+    },
+    invoiceDetails: {
+      type: invoiceDetailsSchema,
     },
     notes: [
       {
