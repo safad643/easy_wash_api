@@ -19,6 +19,7 @@ const posterRoutes = require('./routes/poster.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const vehicleTypeRoutes = require('./routes/vehicleType.routes');
+const reportRoutes = require('./routes/report.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const cors = require('cors');
 
@@ -61,6 +62,7 @@ app.use('/api', settingsRoutes.publicRouter);
 app.use('/api/admin/settings', settingsRoutes.adminRouter);
 app.use('/api/vehicle-types', vehicleTypeRoutes.publicRouter);
 app.use('/api/admin/vehicle-types', vehicleTypeRoutes.adminRouter);
+app.use('/api/admin/reports', reportRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
