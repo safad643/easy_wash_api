@@ -42,10 +42,13 @@ const bookingSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
-  addOns: {
-    type: [String],
-    default: [],
-  },
+  // Add-on snapshots - stored at booking time for historical accuracy
+  addOns: [{
+    addonId: { type: mongoose.Schema.Types.ObjectId },
+    name: { type: String, required: true, trim: true },
+    price: { type: Number, required: true, min: 0 },
+    duration: { type: Number, min: 0 },
+  }],
   paymentType: {
     type: String,
     enum: ['full', 'advance'],

@@ -2,6 +2,7 @@ const Booking = require('../models/booking.model');
 const Service = require('../models/service.model');
 const Vehicle = require('../models/vehicle.model');
 const Slot = require('../models/slot.model');
+const Addon = require('../models/addon.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
 
 class BookingService {
@@ -74,12 +75,28 @@ class BookingService {
       throw new BadRequestError('Service pricing not found. Please contact support.');
     }
 
-    const addOnsTotal = 0; // placeholder until add-ons are modeled
+    // Calculate add-ons total from database
+    let addOnsTotal = 0;
+    let addOnSnapshots = [];
+    if (addOns && addOns.length > 0) {
+      const addOnDocs = await Addon.find({
+        _id: { $in: addOns },
+        isActive: true
+      }).lean();
+      addOnsTotal = addOnDocs.reduce((sum, a) => sum + (a.price || 0), 0);
+      addOnSnapshots = addOnDocs.map(a => ({
+        addonId: a._id,
+        name: a.name,
+        price: a.price,
+        duration: a.duration || 0,
+      }));
+    }
+
     const discount = 0;
     const subTotal = servicePrice + addOnsTotal - discount;
     const taxAmount = Math.round(subTotal * 0.0); // add tax if needed
     const totalAmount = subTotal + taxAmount;
-    const advanceAmount = paymentType === 'advance' ? Math.round(totalAmount * 0.3) : undefined; // Changed to 30% as per frontend
+    const advanceAmount = paymentType === 'advance' ? Math.round(totalAmount * 0.3) : undefined;
 
     return {
       servicePrice,
@@ -275,6 +292,23 @@ class BookingService {
       bodyType: vehicleDoc.bodyType,
     };
 
+
+    // Create add-on snapshots (re-fetch for security/consistency)
+    let addOnSnapshots = [];
+    if (input.addOns && input.addOns.length > 0) {
+      const addOnDocs = await Addon.find({
+        _id: { $in: input.addOns },
+        isActive: true
+      }).lean();
+
+      addOnSnapshots = addOnDocs.map(a => ({
+        addonId: a._id,
+        name: a.name,
+        price: a.price,
+        duration: a.duration || 0,
+      }));
+    }
+
     const booking = await Booking.create({
       userId,
       serviceId: input.serviceId,
@@ -283,7 +317,7 @@ class BookingService {
       slotId: slot._id,
       address: addressObject,
       scheduledAt,
-      addOns: input.addOns || [],
+      addOns: addOnSnapshots,
       paymentType: input.paymentType || 'full',
       status: 'pending',
       paymentStatus: 'pending',

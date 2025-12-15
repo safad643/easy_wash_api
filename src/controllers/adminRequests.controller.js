@@ -552,6 +552,28 @@ class AdminRequestsController {
 
     res.json({ success: true, data: formattedBooking });
   }
+  async adminInvoice(req, res) {
+    const { id } = req.params;
+    const booking = await Booking.findById(id)
+      .populate({
+        path: 'userId',
+        select: 'name email phone avatar',
+        options: { lean: true }
+      })
+      .populate({
+        path: 'staffId',
+        select: 'name phone email status skills',
+        options: { lean: true }
+      })
+      .lean();
+
+    if (!booking) {
+      throw new NotFoundError('Booking not found');
+    }
+
+    const { streamInvoice } = require('../utils/pdfGenerator');
+    streamInvoice(booking, res);
+  }
 }
 
 module.exports = new AdminRequestsController();

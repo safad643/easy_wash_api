@@ -22,6 +22,7 @@ const vehicleTypeRoutes = require('./routes/vehicleType.routes');
 const reportRoutes = require('./routes/report.routes');
 const paymentRoutes = require('./routes/payment.routes');
 const customerRoutes = require('./routes/customer.routes');
+const addonRoutes = require('./routes/addon.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const cors = require('cors');
 
@@ -67,6 +68,8 @@ app.use('/api/admin/vehicle-types', vehicleTypeRoutes.adminRouter);
 app.use('/api/admin/reports', reportRoutes);
 app.use('/api/admin/payments', paymentRoutes);
 app.use('/api/admin/customers', customerRoutes);
+app.use('/api/addons', addonRoutes.publicRouter);
+app.use('/api/admin/addons', addonRoutes.adminRouter);
 
 app.use((req, res) => {
   res.status(404).json({

@@ -15,6 +15,7 @@ router.post('/slots/bulk-status', adminRequestsController.updateSlotsStatus);
 // Booking management endpoints
 router.get('/', adminRequestsController.getAllBookings);
 router.get('/:id', adminRequestsController.getBookingDetail);
+router.get('/:id/invoice', adminRequestsController.adminInvoice);
 router.post('/:id/assign', adminRequestsController.assignStaff);
 router.delete('/:id/assign', adminRequestsController.removeStaffAssignment);
 router.patch('/:id/status', adminRequestsController.updateBookingStatus);
