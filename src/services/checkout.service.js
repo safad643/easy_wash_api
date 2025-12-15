@@ -274,6 +274,9 @@ class CheckoutService {
 
       // Update booking status
       booking.paymentStatus = 'paid';
+      // Store Razorpay transaction IDs for payment tracking
+      booking.razorpayOrderId = razorpay_order_id;
+      booking.razorpayPaymentId = razorpay_payment_id;
       // Status remains 'pending' until admin assigns staff, then becomes 'confirmed'
       await booking.save();
 

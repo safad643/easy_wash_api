@@ -98,6 +98,15 @@ const bookingSchema = new mongoose.Schema({
     default: null,
     index: true,
   },
+  // Razorpay payment tracking
+  razorpayOrderId: {
+    type: String,
+    trim: true,
+  },
+  razorpayPaymentId: {
+    type: String,
+    trim: true,
+  },
 }, {
   timestamps: true,
 });
