@@ -144,7 +144,8 @@ class StaffPaymentsService {
 
         bookings.forEach((booking) => {
             const collectedAt = new Date(booking.paymentCollection?.collectedAt);
-            const dateKey = collectedAt.toISOString().split('T')[0];
+            // Use local date formatting to avoid timezone issues
+            const dateKey = `${collectedAt.getFullYear()}-${String(collectedAt.getMonth() + 1).padStart(2, '0')}-${String(collectedAt.getDate()).padStart(2, '0')}`;
 
             if (!dailySummaries[dateKey]) {
                 dailySummaries[dateKey] = {
@@ -183,7 +184,9 @@ class StaffPaymentsService {
 
         const handoverMap = {};
         handovers.forEach(h => {
-            const dateKey = h.date.toISOString().split('T')[0];
+            // Use local date formatting to avoid timezone issues (same as getStaffCollections)
+            const d = new Date(h.date);
+            const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             handoverMap[dateKey] = h.status;
         });
 
