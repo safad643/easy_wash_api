@@ -14,5 +14,9 @@ router.patch('/:id', staffController.update);
 router.delete('/:id', staffController.delete);
 router.patch('/:id/status', staffController.updateStatus);
 
+// Staff collections and handover routes
+router.get('/:id/collections', staffController.getCollections);
+router.post('/:id/handover', staffController.markHandover);
+
 module.exports = router;
 

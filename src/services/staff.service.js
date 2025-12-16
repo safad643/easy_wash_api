@@ -1,5 +1,6 @@
 const User = require('../models/user.model');
 const Booking = require('../models/booking.model');
+const StaffHandover = require('../models/staffHandover.model');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
@@ -191,7 +192,7 @@ class StaffService {
   // Helper method to format staff response with stats
   async formatStaffResponse(staff) {
     const stats = await this.getStaffStats(staff._id);
-    
+
     return {
       id: staff._id.toString(),
       name: staff.name,
@@ -295,6 +296,201 @@ class StaffService {
     //   onTimeRate: completed > 0 ? (onTime / completed) * 100 : 0,
     //   customerSatisfaction: avgRating,
     // };
+  }
+
+  /**
+   * Get staff collections grouped by date (for admin view)
+   * Shows pending handovers and recent history
+   */
+  async getStaffCollections(staffId, options = {}) {
+    const { days = 30, status } = options;
+
+    // Verify staff exists
+    const staff = await User.findOne({ _id: staffId, role: 'staff' });
+    if (!staff) {
+      throw new NotFoundError('Staff member not found');
+    }
+
+    const endDate = new Date();
+    endDate.setHours(23, 59, 59, 999);
+
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Get all completed bookings with payment collection in date range
+    const bookings = await Booking.find({
+      staffId,
+      status: 'completed',
+      'paymentCollection.method': { $in: ['cash', 'online'] },
+      'paymentCollection.collectedAt': {
+        $gte: startDate,
+        $lte: endDate,
+      },
+    }).lean().exec();
+
+    // Group by date
+    const dailySummaries = {};
+
+    bookings.forEach((booking) => {
+      const collectedAt = new Date(booking.paymentCollection?.collectedAt);
+      const dateKey = collectedAt.toISOString().split('T')[0];
+
+      if (!dailySummaries[dateKey]) {
+        dailySummaries[dateKey] = {
+          date: dateKey,
+          cash: 0,
+          online: 0,
+          total: 0,
+          count: 0,
+          bookingIds: [],
+        };
+      }
+
+      const totalAmount = booking.totalAmount || booking.amount || 0;
+      const advanceAmount = booking.advanceAmount || 0;
+      const collectedAmount = totalAmount - advanceAmount;
+
+      if (booking.paymentCollection?.method === 'cash') {
+        dailySummaries[dateKey].cash += collectedAmount;
+      } else if (booking.paymentCollection?.method === 'online') {
+        dailySummaries[dateKey].online += collectedAmount;
+      }
+      dailySummaries[dateKey].total += collectedAmount;
+      dailySummaries[dateKey].count += 1;
+      dailySummaries[dateKey].bookingIds.push(booking._id);
+    });
+
+    // Get existing handover records
+    const dates = Object.keys(dailySummaries).map(d => {
+      const date = new Date(d);
+      date.setHours(0, 0, 0, 0);
+      return date;
+    });
+
+    const handovers = await StaffHandover.find({
+      staffId,
+      date: { $in: dates },
+    }).populate('receivedBy', 'name').lean().exec();
+
+    const handoverMap = {};
+    handovers.forEach(h => {
+      // Use local date string for consistent matching (avoid timezone issues)
+      const d = new Date(h.date);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      handoverMap[dateKey] = h;
+    });
+
+    // Build result with handover info
+    let result = Object.values(dailySummaries).map(summary => ({
+      ...summary,
+      handoverStatus: handoverMap[summary.date]?.status || 'pending',
+      receivedBy: handoverMap[summary.date]?.receivedBy?.name || null,
+      receivedAt: handoverMap[summary.date]?.receivedAt || null,
+    }));
+
+    // Filter by status if provided
+    if (status === 'pending') {
+      result = result.filter(r => r.handoverStatus === 'pending');
+    } else if (status === 'received') {
+      result = result.filter(r => r.handoverStatus === 'received');
+    }
+
+    // Sort by date descending (most recent first)
+    result.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Calculate totals
+    const pendingItems = result.filter(r => r.handoverStatus === 'pending');
+    const totalPending = pendingItems.reduce((sum, r) => sum + r.total, 0);
+
+    return {
+      staffId: staffId.toString(),
+      staffName: staff.name,
+      collections: result,
+      summary: {
+        totalPending,
+        pendingDays: pendingItems.length,
+      },
+    };
+  }
+
+  /**
+   * Mark a date's collection as received by admin
+   */
+  async markHandoverReceived(staffId, dateStr, adminId) {
+    // Verify staff exists
+    const staff = await User.findOne({ _id: staffId, role: 'staff' });
+    if (!staff) {
+      throw new NotFoundError('Staff member not found');
+    }
+
+    // Parse the date
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(dateStr);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Get collections for this date
+    const bookings = await Booking.find({
+      staffId,
+      status: 'completed',
+      'paymentCollection.method': { $in: ['cash', 'online'] },
+      'paymentCollection.collectedAt': {
+        $gte: date,
+        $lte: endOfDay,
+      },
+    }).lean().exec();
+
+    if (bookings.length === 0) {
+      throw new BadRequestError('No collections found for this date');
+    }
+
+    // Calculate totals
+    let cashAmount = 0;
+    let onlineAmount = 0;
+    const bookingIds = [];
+
+    bookings.forEach((booking) => {
+      const totalAmount = booking.totalAmount || booking.amount || 0;
+      const advanceAmount = booking.advanceAmount || 0;
+      const collectedAmount = totalAmount - advanceAmount;
+
+      if (booking.paymentCollection?.method === 'cash') {
+        cashAmount += collectedAmount;
+      } else if (booking.paymentCollection?.method === 'online') {
+        onlineAmount += collectedAmount;
+      }
+      bookingIds.push(booking._id);
+    });
+
+    // Create or update handover record
+    const handover = await StaffHandover.findOneAndUpdate(
+      { staffId, date },
+      {
+        staffId,
+        date,
+        cashAmount,
+        onlineAmount,
+        totalAmount: cashAmount + onlineAmount,
+        bookingIds,
+        status: 'received',
+        receivedBy: adminId,
+        receivedAt: new Date(),
+      },
+      { upsert: true, new: true }
+    ).populate('receivedBy', 'name');
+
+    return {
+      date: dateStr,
+      cashAmount,
+      onlineAmount,
+      totalAmount: cashAmount + onlineAmount,
+      bookingCount: bookings.length,
+      status: 'received',
+      receivedBy: handover.receivedBy?.name || 'Admin',
+      receivedAt: handover.receivedAt,
+    };
   }
 }
 

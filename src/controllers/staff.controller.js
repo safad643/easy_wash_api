@@ -91,6 +91,54 @@ class StaffController {
       next(error);
     }
   }
+
+  /**
+   * Get staff collections grouped by date (for admin)
+   * GET /admin/staff/:id/collections
+   */
+  async getCollections(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { days = 30, status } = req.query;
+      const result = await staffService.getStaffCollections(id, {
+        days: parseInt(days),
+        status,
+      });
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Mark a date's collection as received
+   * POST /admin/staff/:id/handover
+   */
+  async markHandover(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { date } = req.body;
+      const adminId = req.userId;
+
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Date is required' },
+        });
+      }
+
+      const result = await staffService.markHandoverReceived(id, date, adminId);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new StaffController();
