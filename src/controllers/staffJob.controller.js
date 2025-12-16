@@ -52,7 +52,7 @@ class StaffJobController {
   async updateStatus(req, res, next) {
     try {
       const { id } = req.params;
-      const { status, notes, paymentReceived } = req.body || {};
+      const { status, notes, paymentMethod } = req.body || {};
 
       if (!status) {
         return res.status(400).json({
@@ -63,19 +63,10 @@ class StaffJobController {
         });
       }
 
-      // Handle completed status with payment confirmation
+      // Handle completed status with payment method
       if (status === 'completed') {
-        if (paymentReceived === undefined || typeof paymentReceived !== 'boolean') {
-          return res.status(400).json({
-            success: false,
-            error: {
-              message: 'paymentReceived (boolean) is required when marking job as completed',
-            },
-          });
-        }
-
         const job = await staffJobService.completeJob(req.userId, id, {
-          paymentReceived,
+          paymentMethod,
           notes,
         });
 
@@ -121,20 +112,10 @@ class StaffJobController {
   async complete(req, res, next) {
     try {
       const { id } = req.params;
-      const { paymentReceived, notes } = req.body || {};
-
-      // Validate paymentReceived is provided and is boolean
-      if (paymentReceived === undefined || typeof paymentReceived !== 'boolean') {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: 'paymentReceived (boolean) is required',
-          },
-        });
-      }
+      const { paymentMethod, notes } = req.body || {};
 
       const job = await staffJobService.completeJob(req.userId, id, {
-        paymentReceived,
+        paymentMethod,
         notes,
       });
 

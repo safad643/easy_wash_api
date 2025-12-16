@@ -118,6 +118,17 @@ const bookingSchema = new mongoose.Schema({
       default: 'none'
     },
   },
+  // Payment collection tracking (when staff collects balance)
+  paymentCollection: {
+    method: {
+      type: String,
+      enum: ['cash', 'online', 'prepaid'],
+      default: null,
+    },
+    collectedAt: { type: Date },
+    collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    notes: { type: String, trim: true },
+  },
 }, {
   timestamps: true,
 });

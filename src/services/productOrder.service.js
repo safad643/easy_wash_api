@@ -493,6 +493,11 @@ class ProductOrderService {
       throw new NotFoundError('Order not found');
     }
 
+    // Prevent status changes on cancelled orders
+    if (order.status === 'cancelled') {
+      throw new BadRequestError('Cannot change status of a cancelled order');
+    }
+
     order.status = status;
 
     if (note) {

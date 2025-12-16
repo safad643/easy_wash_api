@@ -216,9 +216,14 @@ class StaffJobService {
   }
 
   /**
-   * Mark a job as completed (with payment confirmation)
+   * Mark a job as completed (with payment collection tracking)
+   * @param {string} staffId - The staff member's ID
+   * @param {string} jobId - The booking/job ID
+   * @param {Object} options - Completion options
+   * @param {string} options.paymentMethod - 'cash' | 'online' | 'none' (none for prepaid)
+   * @param {string} options.notes - Optional notes
    */
-  async completeJob(staffId, jobId, { paymentReceived, notes }) {
+  async completeJob(staffId, jobId, { paymentMethod, notes }) {
     const booking = await Booking.findById(jobId);
 
     if (!booking) {
@@ -238,15 +243,27 @@ class StaffJobService {
       throw new BadRequestError('Cannot complete a cancelled job');
     }
 
-    // Update booking status
-    booking.status = 'completed';
+    // Determine if the booking was already fully paid online (prepaid)
+    const isFullyPrepaid = booking.paymentType === 'full' && booking.paymentStatus === 'paid';
 
-    // Update payment status if payment was received
-    if (paymentReceived === true) {
-      booking.paymentStatus = 'paid';
+    // For advance-payment bookings, payment method is required
+    if (!isFullyPrepaid && (!paymentMethod || !['cash', 'online'].includes(paymentMethod))) {
+      throw new BadRequestError('Payment method (cash or online) is required for balance collection');
     }
 
-    // Add notes if provided
+    // Update booking status
+    booking.status = 'completed';
+    booking.paymentStatus = 'paid';
+
+    // Set payment collection tracking
+    booking.paymentCollection = {
+      method: isFullyPrepaid ? 'prepaid' : paymentMethod,
+      collectedAt: new Date(),
+      collectedBy: staffId,
+      notes: notes || null,
+    };
+
+    // Add notes if provided (to the notes array as well)
     if (notes) {
       if (!booking.notes) {
         booking.notes = [];
@@ -263,6 +280,7 @@ class StaffJobService {
     // Return updated job detail
     return this.getJobDetail(staffId, jobId);
   }
+
 
   /**
    * Mark a job as "couldn't reach" (staff couldn't reach customer location)

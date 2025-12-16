@@ -496,6 +496,11 @@ class AdminRequestsController {
       throw new NotFoundError('Booking not found');
     }
 
+    // Prevent status changes on cancelled bookings
+    if (booking.status === 'cancelled') {
+      throw new BadRequestError('Cannot change status of a cancelled booking');
+    }
+
     booking.status = status;
     await booking.save();
 
