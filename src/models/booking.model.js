@@ -78,11 +78,6 @@ const bookingSchema = new mongoose.Schema({
     type: Number,
     min: 0,
   },
-  feedback: {
-    rating: { type: Number, min: 1, max: 5 },
-    comment: { type: String, trim: true, maxlength: 1000 },
-    createdAt: { type: Date },
-  },
   // Notes added by staff/admin
   notes: [{
     note: { type: String, required: true, trim: true },
@@ -109,6 +104,19 @@ const bookingSchema = new mongoose.Schema({
   razorpayPaymentId: {
     type: String,
     trim: true,
+  },
+  // Refund tracking for cancellations
+  refund: {
+    eligible: { type: Boolean, default: false },
+    amount: { type: Number, default: 0 },
+    reason: { type: String, trim: true },
+    requestedAt: { type: Date },
+    processedAt: { type: Date },
+    status: {
+      type: String,
+      enum: ['none', 'pending', 'processed'],
+      default: 'none'
+    },
   },
 }, {
   timestamps: true,

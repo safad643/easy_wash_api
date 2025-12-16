@@ -149,11 +149,6 @@ const productOrderSchema = new mongoose.Schema(
         addedAt: { type: Date, default: Date.now },
       },
     ],
-    feedback: {
-      rating: { type: Number, min: 1, max: 5 },
-      comment: { type: String, trim: true, maxlength: 1000 },
-      createdAt: { type: Date },
-    },
     meta: {
       type: Map,
       of: String,

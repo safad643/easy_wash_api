@@ -44,7 +44,7 @@ class ServiceService {
     }
 
     const sort = {};
-    const allowedSort = ['name', 'rating', 'duration'];
+    const allowedSort = ['name', 'duration'];
     const sortField = allowedSort.includes(sortBy) ? sortBy : 'name';
     sort[sortField] = sortOrder === 'asc' ? 1 : -1;
 

@@ -341,26 +341,6 @@ class ProductOrderService {
     return { message: 'Order cancelled successfully' };
   }
 
-  async submitFeedback(userId, orderId, { rating, comment }) {
-    if (!rating || rating < 1 || rating > 5) {
-      throw new BadRequestError('Rating must be between 1 and 5');
-    }
-
-    const order = await ProductOrder.findOne({ _id: orderId, userId });
-    if (!order) {
-      throw new NotFoundError('Order not found');
-    }
-
-    order.feedback = {
-      rating,
-      comment: comment || '',
-      createdAt: new Date(),
-    };
-    await order.save();
-
-    return { message: 'Feedback submitted successfully' };
-  }
-
   async listAllOrders(filters = {}) {
     const {
       status,

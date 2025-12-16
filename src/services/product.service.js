@@ -137,7 +137,7 @@ class ProductService {
     }
 
     const sort = {};
-    const allowedSort = ['name', 'price', 'rating'];
+    const allowedSort = ['name', 'price'];
     const sortField = allowedSort.includes(sortBy) ? sortBy : 'name';
     sort[sortField] = sortOrder === 'asc' ? 1 : -1;
 

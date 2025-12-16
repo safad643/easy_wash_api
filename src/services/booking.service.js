@@ -428,7 +428,7 @@ class BookingService {
   async cancelBooking(userId, id) {
     const booking = await Booking.findOne({ _id: id, userId });
     if (!booking) throw new NotFoundError('Booking not found');
-    if (booking.status === 'cancelled') return booking;
+    if (booking.status === 'cancelled') throw new BadRequestError('Booking is already cancelled');
     if (booking.status === 'completed') throw new BadRequestError('Completed bookings cannot be cancelled');
 
     // Release the slot if booking was confirmed or pending
@@ -443,28 +443,39 @@ class BookingService {
       }
     }
 
-    booking.status = 'cancelled';
-    await booking.save();
-    return { message: 'Booking cancelled successfully' };
-  }
+    // Calculate refund eligibility - within 1 hour of booking creation
+    const now = new Date();
+    const bookingCreatedAt = new Date(booking.createdAt);
+    const hoursSinceBooking = (now - bookingCreatedAt) / (1000 * 60 * 60);
+    const isEligibleForRefund = hoursSinceBooking <= 1;
 
-  async submitFeedback(userId, id, { rating, comment }) {
-    const booking = await Booking.findOne({ _id: id, userId });
-    if (!booking) throw new NotFoundError('Booking not found');
-
-    if (!rating || rating < 1 || rating > 5) {
-      throw new BadRequestError('Rating must be between 1 and 5');
-    }
-
-    booking.feedback = {
-      rating,
-      comment: comment || '',
-      createdAt: new Date(),
+    // Set refund details
+    const paidAmount = booking.amount || booking.totalAmount || 0;
+    booking.refund = {
+      eligible: isEligibleForRefund,
+      amount: isEligibleForRefund ? paidAmount : 0,
+      reason: isEligibleForRefund
+        ? 'Cancelled within 1 hour of booking'
+        : 'Cancellation window expired (more than 1 hour since booking)',
+      requestedAt: now,
+      processedAt: null,
+      status: isEligibleForRefund ? 'pending' : 'none',
     };
 
+    booking.status = 'cancelled';
     await booking.save();
-    return { message: 'Feedback submitted successfully' };
+
+    return {
+      message: 'Booking cancelled successfully',
+      refund: {
+        eligible: booking.refund.eligible,
+        amount: booking.refund.amount,
+        reason: booking.refund.reason,
+        status: booking.refund.status,
+      }
+    };
   }
+
 }
 
 module.exports = new BookingService();

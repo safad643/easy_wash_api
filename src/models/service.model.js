@@ -52,12 +52,6 @@ const serviceSchema = new mongoose.Schema(
       default: true,
       index: true,
     },
-    rating: {
-      type: Number,
-      min: 0,
-      max: 5,
-      default: 0,
-    },
     totalBookings: {
       type: Number,
       default: 0,

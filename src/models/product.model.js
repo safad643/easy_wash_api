@@ -61,16 +61,6 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    rating: {
-      type: Number,
-      min: 0,
-      max: 5,
-      default: 0,
-    },
-    reviewCount: {
-      type: Number,
-      default: 0,
-    },
     specifications: {
       type: Map,
       of: String,
