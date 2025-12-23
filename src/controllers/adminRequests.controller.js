@@ -137,37 +137,96 @@ class AdminRequestsController {
   }
 
   async createSlots(req, res) {
-    const { date, startTime, endTime, capacity } = req.body || {};
-    if (!date) throw new BadRequestError('date is required');
-    if (!startTime || !endTime) {
-      throw new BadRequestError('startTime and endTime are required');
+    const {
+      startDate,
+      endDate,
+      weekdayStartTime,
+      weekdayEndTime,
+      weekendStartTime,
+      weekendEndTime,
+      initialStatus = 'available',
+    } = req.body || {};
+
+    // Validate required fields
+    if (!startDate) throw new BadRequestError('startDate is required');
+    if (!endDate) throw new BadRequestError('endDate is required');
+    if (!weekdayStartTime || !weekdayEndTime) {
+      throw new BadRequestError('weekdayStartTime and weekdayEndTime are required');
+    }
+    if (!weekendStartTime || !weekendEndTime) {
+      throw new BadRequestError('weekendStartTime and weekendEndTime are required');
     }
 
-    const hourlyTimes = generateHourlyTimes(startTime, endTime);
-    if (!hourlyTimes.length) {
-      throw new BadRequestError('No slots generated for the provided time range');
+    // Validate status
+    if (!['available', 'unavailable'].includes(initialStatus)) {
+      throw new BadRequestError('initialStatus must be "available" or "unavailable"');
     }
 
-    const operations = hourlyTimes.map((time) => ({
-      updateOne: {
-        filter: { date, time },
-        update: {
-          $set: {
-            date,
-            time,
-            status: 'unavailable',
+    // Parse dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new BadRequestError('Invalid date format. Use YYYY-MM-DD format.');
+    }
+
+    if (start > end) {
+      throw new BadRequestError('endDate must be greater than or equal to startDate');
+    }
+
+    // Generate hourly times for weekdays and weekends
+    const weekdayTimes = generateHourlyTimes(weekdayStartTime, weekdayEndTime);
+    const weekendTimes = generateHourlyTimes(weekendStartTime, weekendEndTime);
+
+    if (!weekdayTimes.length) {
+      throw new BadRequestError('No slots generated for weekday time range');
+    }
+    if (!weekendTimes.length) {
+      throw new BadRequestError('No slots generated for weekend time range');
+    }
+
+    // Generate all dates in range
+    const dates = [];
+    const currentDate = new Date(start);
+    while (currentDate <= end) {
+      dates.push(currentDate.toISOString().split('T')[0]); // YYYY-MM-DD format
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Build slot operations for all dates
+    const operations = [];
+    for (const date of dates) {
+      const dateObj = new Date(date);
+      const dayOfWeek = dateObj.getDay(); // 0 = Sunday, 6 = Saturday
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const times = isWeekend ? weekendTimes : weekdayTimes;
+
+      for (const time of times) {
+        operations.push({
+          updateOne: {
+            filter: { date, time },
+            update: {
+              $setOnInsert: {
+                date,
+                time,
+                status: initialStatus,
+                bookingId: null,
+              },
+            },
+            upsert: true,
           },
-          $setOnInsert: {
-            bookingId: null,
-          },
-        },
-        upsert: true,
-      },
-    }));
+        });
+      }
+    }
+
+    if (!operations.length) {
+      throw new BadRequestError('No slots generated for the provided date range');
+    }
 
     await Slot.bulkWrite(operations, { ordered: false });
 
-    const slots = await Slot.find({ date })
+    // Return slots for the first date in range for immediate display
+    const slots = await Slot.find({ date: startDate })
       .sort({ time: 1 })
       .lean()
       .exec();
@@ -178,8 +237,16 @@ class AdminRequestsController {
       booked: slot.status === 'booked' || slot.bookingId !== null,
     }));
 
-    res.status(201).json({ success: true, data: { slots: formattedSlots } });
+    res.status(201).json({
+      success: true,
+      data: {
+        slots: formattedSlots,
+        daysGenerated: dates.length,
+        totalSlotsCreated: operations.length,
+      },
+    });
   }
+
 
   async updateSlot(req, res) {
     const { slotId } = req.params;
