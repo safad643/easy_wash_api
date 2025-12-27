@@ -139,6 +139,84 @@ class StaffController {
       next(error);
     }
   }
+
+  /**
+   * Get all staff on leave for a specific date
+   * GET /admin/staff/leaves?date=YYYY-MM-DD
+   */
+  async getLeavesByDate(req, res, next) {
+    try {
+      const { date } = req.query;
+
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Date query parameter is required' },
+        });
+      }
+
+      const result = await staffService.getLeavesByDate(date);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Mark a staff member as on leave
+   * POST /admin/staff/:id/leave
+   */
+  async markLeave(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { date, reason } = req.body;
+      const adminId = req.userId;
+
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Date is required' },
+        });
+      }
+
+      const result = await staffService.markLeave(id, date, reason, adminId);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Remove leave for a staff member
+   * DELETE /admin/staff/:id/leave?date=YYYY-MM-DD
+   */
+  async removeLeave(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { date } = req.query;
+
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          error: { message: 'Date query parameter is required' },
+        });
+      }
+
+      const result = await staffService.removeLeave(id, date);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new StaffController();

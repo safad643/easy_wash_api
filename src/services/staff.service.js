@@ -1,6 +1,7 @@
 const User = require('../models/user.model');
 const Booking = require('../models/booking.model');
 const StaffHandover = require('../models/staffHandover.model');
+const StaffLeave = require('../models/staffLeave.model');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
@@ -238,15 +239,15 @@ class StaffService {
   async getStaffStats(staffId) {
     // Get all bookings assigned to this staff member
     const bookings = await Booking.find({ staffId: staffId }).lean();
-    
+
     // Count completed jobs
     const completedBookings = bookings.filter(b => b.status === 'completed');
     const totalJobs = completedBookings.length;
-    
+
     // Calculate average rating (if feedback system exists)
     // For now, set to 0 as Booking model doesn't have direct rating field
     const avgRating = 0;
-    
+
     // Calculate total earnings from completed bookings
     // Use totalAmount if available, otherwise fall back to amount
     const earnings = completedBookings.reduce((sum, b) => {
@@ -264,7 +265,7 @@ class StaffService {
       .limit(10)
       .populate('userId', 'name')
       .lean();
-    
+
     return bookings.map(b => ({
       id: b._id.toString(),
       service: b.serviceName || 'Service',
@@ -492,6 +493,90 @@ class StaffService {
       receivedBy: handover.receivedBy?.name || 'Admin',
       receivedAt: handover.receivedAt,
     };
+  }
+
+  /**
+   * Get all staff on leave for a specific date
+   */
+  async getLeavesByDate(dateStr) {
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(dateStr);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const leaves = await StaffLeave.find({
+      date: { $gte: date, $lte: endOfDay },
+    }).populate('staffId', 'name email phone').lean();
+
+    return leaves.map(leave => ({
+      id: leave._id.toString(),
+      staffId: leave.staffId?._id?.toString() || leave.staffId,
+      staffName: leave.staffId?.name || 'Unknown',
+      date: dateStr,
+      reason: leave.reason || null,
+      createdAt: leave.createdAt,
+    }));
+  }
+
+  /**
+   * Mark a staff member as on leave for a specific date
+   */
+  async markLeave(staffId, dateStr, reason, adminId) {
+    // Verify staff exists
+    const staff = await User.findOne({ _id: staffId, role: 'staff' });
+    if (!staff) {
+      throw new NotFoundError('Staff member not found');
+    }
+
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+
+    // Check if leave already exists (will throw duplicate key error if it does)
+    try {
+      const leave = await StaffLeave.create({
+        staffId,
+        date,
+        reason,
+        createdBy: adminId,
+      });
+
+      return {
+        id: leave._id.toString(),
+        staffId: staffId.toString(),
+        staffName: staff.name,
+        date: dateStr,
+        reason: leave.reason || null,
+        createdAt: leave.createdAt,
+      };
+    } catch (error) {
+      if (error.code === 11000) {
+        throw new BadRequestError('Staff is already marked on leave for this date');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Remove leave for a staff member on a specific date
+   */
+  async removeLeave(staffId, dateStr) {
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(dateStr);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const result = await StaffLeave.findOneAndDelete({
+      staffId,
+      date: { $gte: date, $lte: endOfDay },
+    });
+
+    if (!result) {
+      throw new NotFoundError('Leave record not found for this date');
+    }
+
+    return { message: 'Leave removed successfully' };
   }
 }
 
