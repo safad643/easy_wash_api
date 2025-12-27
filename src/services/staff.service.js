@@ -205,6 +205,7 @@ class StaffService {
       earnings: stats.earnings,
       avatar: staff.avatar,
       joinedDate: staff.createdAt.toISOString().split('T')[0],
+      area: staff.area || '', // Add area field to prevent undefined in frontend
     };
   }
 
@@ -229,49 +230,49 @@ class StaffService {
       skills: staff.skills || [],
       recentJobs: recentJobs,
       performanceMetrics: performanceMetrics,
+      area: staff.area || '', // Add area field to prevent undefined in frontend
     };
   }
 
   // Helper method to get staff statistics
   async getStaffStats(staffId) {
-    // For now, return placeholder values since bookings don't have staffId yet
-    // TODO: Update this when staff assignment is implemented
-    const totalJobs = 0;
+    // Get all bookings assigned to this staff member
+    const bookings = await Booking.find({ staffId: staffId }).lean();
+    
+    // Count completed jobs
+    const completedBookings = bookings.filter(b => b.status === 'completed');
+    const totalJobs = completedBookings.length;
+    
+    // Calculate average rating (if feedback system exists)
+    // For now, set to 0 as Booking model doesn't have direct rating field
     const avgRating = 0;
-    const earnings = 0;
-
-    // When staff assignment is implemented, uncomment and use:
-    // const bookings = await Booking.find({ staffId: staffId });
-    // const totalJobs = bookings.length;
-    // const completedBookings = bookings.filter(b => b.status === 'completed');
-    // const avgRating = completedBookings.length > 0
-    //   ? completedBookings.reduce((sum, b) => sum + (b.feedback?.rating || 0), 0) / completedBookings.length
-    //   : 0;
-    // const earnings = completedBookings.reduce((sum, b) => sum + (b.amount || 0), 0);
+    
+    // Calculate total earnings from completed bookings
+    // Use totalAmount if available, otherwise fall back to amount
+    const earnings = completedBookings.reduce((sum, b) => {
+      const bookingAmount = b.totalAmount || b.amount || 0;
+      return sum + bookingAmount;
+    }, 0);
 
     return { totalJobs, avgRating, earnings };
   }
 
   // Helper method to get recent jobs
   async getRecentJobs(staffId) {
-    // For now, return empty array since bookings don't have staffId yet
-    // TODO: Update this when staff assignment is implemented
-    return [];
-
-    // When staff assignment is implemented, uncomment and use:
-    // const bookings = await Booking.find({ staffId: staffId })
-    //   .sort({ createdAt: -1 })
-    //   .limit(10)
-    //   .populate('userId', 'name')
-    //   .populate('serviceId', 'name');
-    // return bookings.map(b => ({
-    //   id: b._id.toString(),
-    //   service: b.serviceName || 'Service',
-    //   customer: b.userId?.name || 'Customer',
-    //   date: b.scheduledAt.toISOString(),
-    //   status: b.status,
-    //   amount: b.amount || 0,
-    // }));
+    const bookings = await Booking.find({ staffId: staffId })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate('userId', 'name')
+      .lean();
+    
+    return bookings.map(b => ({
+      id: b._id.toString(),
+      service: b.serviceName || 'Service',
+      customer: b.userId?.name || 'Customer',
+      date: b.scheduledAt ? b.scheduledAt.toISOString() : b.createdAt.toISOString(),
+      status: b.status,
+      amount: b.totalAmount || b.amount || 0,
+    }));
   }
 
   // Helper method to get performance metrics
