@@ -47,16 +47,6 @@ class OrdersController {
     }
   }
 
-  async feedback(req, res, next) {
-    try {
-      const { rating, comment } = req.body || {};
-      const data = await productOrderService.submitFeedback(req.userId, req.params.id, { rating, comment });
-      res.json({ success: true, data });
-    } catch (err) {
-      next(err);
-    }
-  }
-
   async adminList(req, res, next) {
     try {
       const data = await productOrderService.listAllOrders(req.query || {});
