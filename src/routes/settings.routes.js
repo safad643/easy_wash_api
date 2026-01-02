@@ -6,6 +6,7 @@ const { authenticate, authorize } = require('../middlewares/auth.middleware');
 const publicRouter = express.Router();
 publicRouter.get('/platform-contact', settingsController.getPlatformContact);
 publicRouter.get('/company-details', settingsController.getCompanyDetails);
+publicRouter.get('/delivery-settings', settingsController.getDeliverySettings);
 
 // Admin router - requires auth + admin role
 const adminRouter = express.Router();
@@ -17,5 +18,8 @@ adminRouter.put('/platform-contact', settingsController.updatePlatformContact);
 
 adminRouter.get('/company-details', settingsController.getCompanyDetails);
 adminRouter.put('/company-details', settingsController.updateCompanyDetails);
+
+adminRouter.get('/delivery-settings', settingsController.getDeliverySettings);
+adminRouter.put('/delivery-settings', settingsController.updateDeliverySettings);
 
 module.exports = { publicRouter, adminRouter };

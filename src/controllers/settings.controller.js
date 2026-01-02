@@ -51,3 +51,29 @@ exports.updateCompanyDetails = async (req, res, next) => {
         next(error);
     }
 };
+
+// Delivery Settings
+exports.getDeliverySettings = async (req, res, next) => {
+    try {
+        const settings = await settingsService.getDeliverySettings();
+        res.json({
+            success: true,
+            data: settings,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+exports.updateDeliverySettings = async (req, res, next) => {
+    try {
+        const settings = await settingsService.updateDeliverySettings(req.body);
+        res.json({
+            success: true,
+            message: 'Delivery settings updated successfully',
+            data: settings,
+        });
+    } catch (error) {
+        next(error);
+    }
+};

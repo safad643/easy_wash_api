@@ -36,3 +36,23 @@ exports.updateCompanyDetails = async (data) => {
     );
     return details;
 };
+
+// Delivery Settings
+const DeliverySettings = require('../models/deliverySettings.model');
+
+exports.getDeliverySettings = async () => {
+    let settings = await DeliverySettings.findOne();
+    if (!settings) {
+        settings = await DeliverySettings.create({});
+    }
+    return settings;
+};
+
+exports.updateDeliverySettings = async (data) => {
+    const settings = await DeliverySettings.findOneAndUpdate(
+        {},
+        { $set: data },
+        { new: true, upsert: true, runValidators: true }
+    );
+    return settings;
+};
