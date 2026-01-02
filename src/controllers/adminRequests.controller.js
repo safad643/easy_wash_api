@@ -520,6 +520,11 @@ class AdminRequestsController {
       throw new BadRequestError('Cannot assign inactive staff member');
     }
 
+    // Prevent staff changes on completed bookings
+    if (booking.status === 'completed') {
+      throw new BadRequestError('Cannot change staff assignment for a completed booking');
+    }
+
     // Update booking with staff assignment
     booking.staffId = staffId;
     if (booking.status === 'pending') {
@@ -642,6 +647,11 @@ class AdminRequestsController {
     const booking = await Booking.findById(id);
     if (!booking) {
       throw new NotFoundError('Booking not found');
+    }
+
+    // Prevent staff removal on completed bookings
+    if (booking.status === 'completed') {
+      throw new BadRequestError('Cannot remove staff assignment from a completed booking');
     }
 
     booking.staffId = null;
