@@ -4,6 +4,7 @@ const Address = require('../models/address.model');
 const Cart = require('../models/cart.model');
 const CompanyDetails = require('../models/companyDetails.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
+const notificationService = require('./notification.service');
 
 const escapeRegex = (text = '') => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -265,6 +266,18 @@ class ProductOrderService {
       );
     }
 
+    // Send order confirmation notification
+    try {
+      await notificationService.createNotification(userId, {
+        title: 'Order Placed!',
+        message: `Your order #${order.orderNumber} has been placed successfully.`,
+        type: 'order',
+        actionUrl: `/orders/products/${order._id}`
+      });
+    } catch (err) {
+      console.error('Failed to send order confirmation notification:', err.message);
+    }
+
     return order;
   }
 
@@ -510,6 +523,31 @@ class ProductOrderService {
     }
 
     await order.save();
+
+    // Send status update notification
+    const statusMessages = {
+      'confirmed': 'Your order has been confirmed!',
+      'packed': 'Your order has been packed and is ready for shipping.',
+      'shipped': 'Your order has been shipped!',
+      'out-for-delivery': 'Your order is out for delivery!',
+      'delivered': 'Your order has been delivered. Enjoy!',
+      'cancelled': 'Your order has been cancelled.',
+      'returned': 'Your return has been processed.'
+    };
+
+    if (statusMessages[status] && order.userId) {
+      try {
+        await notificationService.createNotification(order.userId._id || order.userId, {
+          title: `Order ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+          message: statusMessages[status],
+          type: 'order',
+          actionUrl: `/orders/products/${order._id}`
+        });
+      } catch (err) {
+        console.error('Failed to send order status notification:', err.message);
+      }
+    }
+
     return formatOrderForAdmin(order);
   }
 }

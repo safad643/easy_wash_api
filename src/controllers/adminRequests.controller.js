@@ -4,6 +4,7 @@ const User = require('../models/user.model');
 const Vehicle = require('../models/vehicle.model');
 const Address = require('../models/address.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
+const notificationService = require('../services/notification.service');
 
 const toMinutes = (time) => {
   if (!time || typeof time !== 'string') return 0;
@@ -543,6 +544,30 @@ class AdminRequestsController {
 
     const formattedBooking = formatBookingDetail(updatedBooking);
 
+    // Notify customer that staff has been assigned
+    try {
+      await notificationService.createNotification(booking.userId, {
+        title: 'Staff Assigned',
+        message: `${staff.name} has been assigned to your booking.`,
+        type: 'booking',
+        actionUrl: `/orders/services/${booking._id}`
+      });
+    } catch (err) {
+      console.error('Failed to send staff assignment notification:', err.message);
+    }
+
+    // Notify staff about new assignment
+    try {
+      await notificationService.createNotification(staffId, {
+        title: 'New Job Assigned',
+        message: `You have been assigned a new ${booking.serviceName || 'service'} job.`,
+        type: 'booking',
+        actionUrl: `/staff/jobs/${booking._id}`
+      });
+    } catch (err) {
+      console.error('Failed to send staff job notification:', err.message);
+    }
+
     res.json({ success: true, data: formattedBooking });
   }
 
@@ -587,6 +612,26 @@ class AdminRequestsController {
       .exec();
 
     const formattedBooking = formatBookingDetail(updatedBooking);
+
+    // Notify customer about booking status change
+    const statusMessages = {
+      'confirmed': 'Your booking has been confirmed!',
+      'cancelled': 'Your booking has been cancelled.',
+      'completed': 'Your service has been completed. Thank you!'
+    };
+
+    if (statusMessages[status]) {
+      try {
+        await notificationService.createNotification(booking.userId, {
+          title: `Booking ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+          message: statusMessages[status],
+          type: 'booking',
+          actionUrl: `/orders/services/${booking._id}`
+        });
+      } catch (err) {
+        console.error('Failed to send booking status notification:', err.message);
+      }
+    }
 
     res.json({ success: true, data: formattedBooking });
   }

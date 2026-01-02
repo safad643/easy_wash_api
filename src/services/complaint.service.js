@@ -3,6 +3,7 @@ const Booking = require('../models/booking.model');
 const ProductOrder = require('../models/productOrder.model');
 const User = require('../models/user.model');
 const { BadRequestError, NotFoundError, ForbiddenError } = require('../utils/errors');
+const notificationService = require('./notification.service');
 
 // Complaint eligibility window in hours
 const COMPLAINT_WINDOW_HOURS = 48;
@@ -347,6 +348,29 @@ class ComplaintService {
         }
 
         await complaint.save();
+
+        // Send notification to customer about complaint status
+        const statusMessages = {
+            'in_progress': 'We are looking into your complaint.',
+            'resolved_call': 'Your complaint has been resolved.',
+            'resolved_message': 'Your complaint has been resolved.',
+            'invalid': 'Your complaint has been reviewed and closed.'
+        };
+
+        if (statusMessages[status] && status !== 'ignored') {
+            try {
+                await notificationService.createNotification(complaint.userId, {
+                    title: isResolved ? 'Complaint Resolved' : 'Complaint Update',
+                    message: statusMessages[status],
+                    type: 'system',
+                    actionUrl: complaint.referenceType === 'booking'
+                        ? `/orders/services/${complaint.referenceId}`
+                        : `/orders/products/${complaint.referenceId}`
+                });
+            } catch (err) {
+                console.error('Failed to send complaint notification:', err.message);
+            }
+        }
 
         return this._formatComplaint(complaint);
     }

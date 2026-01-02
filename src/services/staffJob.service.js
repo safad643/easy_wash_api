@@ -2,6 +2,7 @@ const Booking = require('../models/booking.model');
 const User = require('../models/user.model');
 const Vehicle = require('../models/vehicle.model');
 const { BadRequestError, NotFoundError, ForbiddenError } = require('../utils/errors');
+const notificationService = require('./notification.service');
 
 class StaffJobService {
   /**
@@ -276,6 +277,18 @@ class StaffJobService {
     }
 
     await booking.save();
+
+    // Send notification to customer
+    try {
+      await notificationService.createNotification(booking.userId, {
+        title: 'Service Completed!',
+        message: `Your ${booking.serviceName || 'car wash'} service is complete. Thank you for choosing us!`,
+        type: 'booking',
+        actionUrl: `/orders/services/${booking._id}`
+      });
+    } catch (err) {
+      console.error('Failed to send completion notification:', err.message);
+    }
 
     // Return updated job detail
     return this.getJobDetail(staffId, jobId);
