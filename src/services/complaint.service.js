@@ -4,13 +4,13 @@ const ProductOrder = require('../models/productOrder.model');
 const User = require('../models/user.model');
 const { BadRequestError, NotFoundError, ForbiddenError } = require('../utils/errors');
 
-// Complaint eligibility window in days
-const COMPLAINT_WINDOW_DAYS = 7;
+// Complaint eligibility window in hours
+const COMPLAINT_WINDOW_HOURS = 48;
 
 class ComplaintService {
     /**
      * Create a complaint for a booking or product order
-     * Validates: ownership, completion status, 7-day window, no duplicates
+     * Validates: ownership, completion status, 48-hour window, no duplicates
      */
     async createComplaint(userId, { referenceType, referenceId, category, description }) {
         // Validate required fields
@@ -52,11 +52,11 @@ class ComplaintService {
             completedAt = order.updatedAt; // Use updatedAt as delivery time
         }
 
-        // Check 7-day window
+        // Check 48-hour window
         const now = new Date();
-        const daysSinceCompletion = (now - completedAt) / (1000 * 60 * 60 * 24);
-        if (daysSinceCompletion > COMPLAINT_WINDOW_DAYS) {
-            throw new BadRequestError(`Complaints can only be filed within ${COMPLAINT_WINDOW_DAYS} days of order completion`);
+        const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
+        if (hoursSinceCompletion > COMPLAINT_WINDOW_HOURS) {
+            throw new BadRequestError(`Complaints can only be filed within ${COMPLAINT_WINDOW_HOURS} hours of order completion`);
         }
 
         // Create the complaint
@@ -120,14 +120,14 @@ class ComplaintService {
             completedAt = order.updatedAt;
         }
 
-        // Check 7-day window
+        // Check 48-hour window
         const now = new Date();
-        const daysSinceCompletion = (now - completedAt) / (1000 * 60 * 60 * 24);
-        if (daysSinceCompletion > COMPLAINT_WINDOW_DAYS) {
-            return { canFile: false, reason: 'window_expired', daysAgo: Math.floor(daysSinceCompletion) };
+        const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
+        if (hoursSinceCompletion > COMPLAINT_WINDOW_HOURS) {
+            return { canFile: false, reason: 'window_expired', hoursAgo: Math.floor(hoursSinceCompletion) };
         }
 
-        return { canFile: true, daysRemaining: Math.ceil(COMPLAINT_WINDOW_DAYS - daysSinceCompletion) };
+        return { canFile: true, hoursRemaining: Math.ceil(COMPLAINT_WINDOW_HOURS - hoursSinceCompletion) };
     }
 
     /**
