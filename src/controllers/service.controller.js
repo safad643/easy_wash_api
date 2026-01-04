@@ -42,6 +42,13 @@ const updateService = async (req, res, next) => {
   res.json({ success: true, data: service });
 };
 
+const getServiceReviews = async (req, res, next) => {
+  const { id } = req.params;
+  const { page, limit } = req.query;
+  const result = await serviceService.getServiceReviews(id, { page, limit });
+  res.json({ success: true, data: result });
+};
+
 const deleteService = async (req, res, next) => {
   const { id } = req.params;
   await serviceService.deleteService(id);
@@ -52,6 +59,7 @@ module.exports = {
   createService,
   getServices,
   getServiceById,
+  getServiceReviews,
   updateService,
   deleteService,
 };

@@ -476,6 +476,32 @@ class BookingService {
     };
   }
 
+  async submitFeedback(userId, bookingId, { rating, comment }) {
+    if (!rating || rating < 1 || rating > 5) {
+      throw new BadRequestError('Rating must be between 1 and 5');
+    }
+
+    const booking = await Booking.findOne({ _id: bookingId, userId });
+    if (!booking) throw new NotFoundError('Booking not found');
+
+    if (booking.status !== 'completed') {
+      throw new BadRequestError('Feedback can only be submitted for completed bookings');
+    }
+
+    if (booking.feedback && booking.feedback.rating) {
+      throw new BadRequestError('Feedback has already been submitted for this booking');
+    }
+
+    booking.feedback = {
+      rating: Math.round(rating),
+      comment: comment ? comment.trim().slice(0, 500) : undefined,
+      submittedAt: new Date(),
+    };
+
+    await booking.save();
+
+    return { message: 'Thank you for your feedback!' };
+  }
 }
 
 module.exports = new BookingService();

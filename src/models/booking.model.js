@@ -129,6 +129,12 @@ const bookingSchema = new mongoose.Schema({
     collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     notes: { type: String, trim: true },
   },
+  // Customer feedback after service completion
+  feedback: {
+    rating: { type: Number, min: 1, max: 5 },
+    comment: { type: String, trim: true, maxlength: 500 },
+    submittedAt: { type: Date },
+  },
 }, {
   timestamps: true,
 });

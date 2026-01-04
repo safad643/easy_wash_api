@@ -1,4 +1,5 @@
 const Service = require('../models/service.model');
+const Booking = require('../models/booking.model');
 const { NotFoundError, BadRequestError } = require('../utils/errors');
 
 class ServiceService {
@@ -54,10 +55,38 @@ class ServiceService {
     const services = await Service.find(query)
       .sort(sort)
       .skip(skip)
-      .limit(limit);
+      .limit(limit)
+      .lean();
+
+    // Get average ratings for all services
+    const serviceIds = services.map(s => s._id.toString());
+    const ratingsAgg = await Booking.aggregate([
+      {
+        $match: {
+          serviceId: { $in: serviceIds },
+          status: 'completed',
+          'feedback.rating': { $exists: true, $ne: null }
+        }
+      },
+      {
+        $group: {
+          _id: '$serviceId',
+          averageRating: { $avg: '$feedback.rating' },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const ratingsMap = new Map(ratingsAgg.map(r => [r._id, { averageRating: r.averageRating, totalReviews: r.totalReviews }]));
+
+    const servicesWithRatings = services.map(service => ({
+      ...service,
+      averageRating: ratingsMap.get(service._id.toString())?.averageRating || null,
+      totalReviews: ratingsMap.get(service._id.toString())?.totalReviews || 0
+    }));
 
     return {
-      data: services,
+      data: servicesWithRatings,
       total,
       page: parseInt(page),
       limit: parseInt(limit),
@@ -66,11 +95,34 @@ class ServiceService {
   }
 
   async getServiceById(id) {
-    const service = await Service.findById(id);
+    const service = await Service.findById(id).lean();
     if (!service) {
       throw new NotFoundError('Service not found');
     }
-    return service;
+
+    // Get average rating for this service
+    const ratingAgg = await Booking.aggregate([
+      {
+        $match: {
+          serviceId: id,
+          status: 'completed',
+          'feedback.rating': { $exists: true, $ne: null }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          averageRating: { $avg: '$feedback.rating' },
+          totalReviews: { $sum: 1 }
+        }
+      }
+    ]);
+
+    return {
+      ...service,
+      averageRating: ratingAgg[0]?.averageRating || null,
+      totalReviews: ratingAgg[0]?.totalReviews || 0
+    };
   }
 
   async updateService(id, updateData) {
@@ -88,6 +140,54 @@ class ServiceService {
       throw new NotFoundError('Service not found');
     }
     return service;
+  }
+
+  async getServiceReviews(serviceId, options = {}) {
+    const { page = 1, limit = 10 } = options;
+    const skip = (page - 1) * limit;
+
+    // Get all completed bookings with feedback for this service
+    const matchQuery = {
+      serviceId: serviceId,
+      status: 'completed',
+      'feedback.rating': { $exists: true, $ne: null }
+    };
+
+    // Get total count
+    const total = await Booking.countDocuments(matchQuery);
+
+    // Get reviews with user info
+    const bookings = await Booking.find(matchQuery)
+      .populate('userId', 'name email')
+      .sort({ 'feedback.submittedAt': -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const reviews = bookings.map(booking => ({
+      id: booking._id.toString(),
+      userName: booking.userId?.name || 'Anonymous',
+      rating: booking.feedback.rating,
+      comment: booking.feedback.comment || '',
+      createdAt: booking.feedback.submittedAt || booking.updatedAt,
+      serviceName: booking.serviceName,
+    }));
+
+    // Calculate average rating
+    const avgResult = await Booking.aggregate([
+      { $match: matchQuery },
+      { $group: { _id: null, avg: { $avg: '$feedback.rating' } } }
+    ]);
+    const averageRating = avgResult[0]?.avg || 0;
+
+    return {
+      reviews,
+      averageRating,
+      total,
+      page: parseInt(page),
+      limit: parseInt(limit),
+      totalPages: Math.ceil(total / limit),
+    };
   }
 
   async deleteService(id) {

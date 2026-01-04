@@ -22,9 +22,9 @@ class BookingController {
   async availableDays(req, res, next) {
     try {
       const { serviceId, daysAhead } = req.query;
-      const data = await bookingService.getAvailableDays({ 
-        serviceId, 
-        daysAhead: daysAhead ? parseInt(daysAhead) : undefined 
+      const data = await bookingService.getAvailableDays({
+        serviceId,
+        daysAhead: daysAhead ? parseInt(daysAhead) : undefined
       });
       res.json({ success: true, data });
     } catch (err) {
@@ -63,6 +63,16 @@ class BookingController {
   async cancel(req, res, next) {
     try {
       const data = await bookingService.cancelBooking(req.userId, req.params.id);
+      res.json({ success: true, data });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async feedback(req, res, next) {
+    try {
+      const { rating, comment } = req.body || {};
+      const data = await bookingService.submitFeedback(req.userId, req.params.id, { rating, comment });
       res.json({ success: true, data });
     } catch (err) {
       next(err);
