@@ -18,7 +18,7 @@ const loginWithCredentials = async ({ identifier, password }) => {
   if (!user || !user.password) {
     throw new UnauthorizedError('Invalid credentials');
   }
-  
+
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch) {
     throw new UnauthorizedError('Invalid credentials');
@@ -44,11 +44,11 @@ const loginWithCredentials = async ({ identifier, password }) => {
 const googleLogin = async (authCode) => {
   try {
     const googleUser = await googleService.verifyAuthCode(authCode);
-    
+
     if (!googleUser.emailVerified) {
       throw new UnauthorizedError('Email not verified with Google');
     }
-    
+
     let user = await User.findOne({ googleId: googleUser.id });
     if (!user) {
       user = await User.create({
@@ -56,16 +56,16 @@ const googleLogin = async (authCode) => {
         email: googleUser.email
       });
     }
-    
+
     const accessToken = generateAccessToken(user._id, user.role);
     const refreshToken = generateRefreshToken();
-    
+
     await RefreshToken.create({
       userId: user._id,
       token: await bcrypt.hash(refreshToken, 10),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     });
-    
+
     return { accessToken, refreshToken, user };
   } catch (error) {
     if (error.isOperational) throw error;
@@ -78,23 +78,23 @@ const sendPhoneOTP = async (phone) => {
     if (!phone || !/^\+?[1-9]\d{1,14}$/.test(phone)) {
       throw new BadRequestError('Invalid phone number format');
     }
-    
+
     await OTP.deleteMany({ phone, purpose: 'verification' });
-    
+
     // const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const otpCode = '123456';
-    
+
     const hashedOTP = await bcrypt.hash(otpCode, 10);
-    
+
     await OTP.create({
       phone,
       otp: hashedOTP,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       purpose: 'verification'
     });
-    
+
     await sendOTP(phone, otpCode);
-    
+
     return { message: 'OTP sent successfully' };
   } catch (error) {
     if (error.isOperational) throw error;
@@ -102,40 +102,125 @@ const sendPhoneOTP = async (phone) => {
   }
 };
 
-const verifyPhoneOTP = async (phone, otpCode) => {
+// Send OTP to email for login (requires existing account)
+const sendEmailLoginOTP = async (email) => {
   try {
-    const otpRecord = await OTP.findOne({ phone, purpose: 'verification' });
-    
+    if (!email || !email.includes('@')) {
+      throw new BadRequestError('Valid email is required');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if account exists
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      throw new BadRequestError('No account found with this email');
+    }
+
+    // Delete existing verification OTPs for this email
+    await OTP.deleteMany({ email: normalizedEmail, purpose: 'verification' });
+
+    // Generate OTP (use 123456 for dev, uncomment random for production)
+    // const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpCode = '123456';
+
+    const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+    await OTP.create({
+      email: normalizedEmail,
+      otp: hashedOTP,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      purpose: 'verification'
+    });
+
+    await sendEmailOTP(normalizedEmail, otpCode);
+
+    return { message: 'OTP sent to your email' };
+  } catch (error) {
+    if (error.isOperational) throw error;
+    throw new Error(`Failed to send email OTP: ${error.message}`);
+  }
+};
+
+// Verify email OTP for login (no auto-registration)
+const verifyEmailLoginOTP = async (email, otpCode) => {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const otpRecord = await OTP.findOne({ email: normalizedEmail, purpose: 'verification' });
+
     if (!otpRecord) {
       throw new UnauthorizedError('Invalid or expired OTP');
     }
-    
+
     if (otpRecord.expiresAt < new Date()) {
       await OTP.deleteOne({ _id: otpRecord._id });
       throw new UnauthorizedError('OTP has expired');
     }
-    
+
     const isValid = await bcrypt.compare(otpCode, otpRecord.otp);
     if (!isValid) {
       throw new UnauthorizedError('Invalid OTP');
     }
-    
+
     await OTP.deleteOne({ _id: otpRecord._id });
-    
-    let user = await User.findOne({ phone });
+
+    // Find existing user (no auto-registration for email OTP login)
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
-      user = await User.create({ phone });
+      throw new UnauthorizedError('No account found with this email');
     }
-    
+
     const accessToken = generateAccessToken(user._id, user.role);
     const refreshToken = generateRefreshToken();
-    
+
     await RefreshToken.create({
       userId: user._id,
       token: await bcrypt.hash(refreshToken, 10),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     });
-    
+
+    return { accessToken, refreshToken, user };
+  } catch (error) {
+    if (error.isOperational) throw error;
+    throw new Error(`Email OTP verification failed: ${error.message}`);
+  }
+};
+
+const verifyPhoneOTP = async (phone, otpCode) => {
+  try {
+    const otpRecord = await OTP.findOne({ phone, purpose: 'verification' });
+
+    if (!otpRecord) {
+      throw new UnauthorizedError('Invalid or expired OTP');
+    }
+
+    if (otpRecord.expiresAt < new Date()) {
+      await OTP.deleteOne({ _id: otpRecord._id });
+      throw new UnauthorizedError('OTP has expired');
+    }
+
+    const isValid = await bcrypt.compare(otpCode, otpRecord.otp);
+    if (!isValid) {
+      throw new UnauthorizedError('Invalid OTP');
+    }
+
+    await OTP.deleteOne({ _id: otpRecord._id });
+
+    let user = await User.findOne({ phone });
+    if (!user) {
+      user = await User.create({ phone });
+    }
+
+    const accessToken = generateAccessToken(user._id, user.role);
+    const refreshToken = generateRefreshToken();
+
+    await RefreshToken.create({
+      userId: user._id,
+      token: await bcrypt.hash(refreshToken, 10),
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    });
+
     return { accessToken, refreshToken, user };
   } catch (error) {
     if (error.isOperational) throw error;
@@ -155,22 +240,22 @@ const refreshAccessToken = async (refreshToken) => {
         break;
       }
     }
-    
+
     if (!tokenRecord) {
       throw new UnauthorizedError('Invalid refresh token');
     }
-    
+
     if (tokenRecord.expiresAt < new Date()) {
       await RefreshToken.deleteOne({ _id: tokenRecord._id });
       throw new UnauthorizedError('Refresh token expired');
     }
-    
+
     const user = await User.findById(tokenRecord.userId);
     if (!user) {
       throw new UnauthorizedError('User no longer exists');
     }
     const accessToken = generateAccessToken(user._id, user.role);
-    
+
     return { accessToken, user };
   } catch (error) {
     if (error.isOperational) throw error;
@@ -195,16 +280,81 @@ const logout = async (refreshToken) => {
   }
 };
 
-const registerUser = async ({ phone, name, email, password }) => {
-  if (!phone || !password || !name) {
-    throw new BadRequestError('Name, phone and password are required');
+// Send OTP for registration (before account creation)
+const sendRegistrationOTP = async (email) => {
+  try {
+    if (!email || !email.includes('@')) {
+      throw new BadRequestError('Valid email is required');
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Check if account already exists
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser) {
+      throw new BadRequestError('An account already exists with this email');
+    }
+
+    // Delete existing registration OTPs for this email
+    await OTP.deleteMany({ email: normalizedEmail, purpose: 'registration' });
+
+    // Generate OTP (use 123456 for dev, uncomment random for production)
+    // const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpCode = '123456';
+
+    const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+    await OTP.create({
+      email: normalizedEmail,
+      otp: hashedOTP,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      purpose: 'registration'
+    });
+
+    await sendEmailOTP(normalizedEmail, otpCode);
+
+    return { message: 'OTP sent to your email for verification' };
+  } catch (error) {
+    if (error.isOperational) throw error;
+    throw new Error(`Failed to send registration OTP: ${error.message}`);
   }
-  const existing = await User.findOne({ $or: [{ phone }, { email }] });
+};
+
+const registerUser = async ({ phone, name, email, password, otp }) => {
+  if (!phone || !password || !name || !email || !otp) {
+    throw new BadRequestError('Name, phone, email, password and OTP are required');
+  }
+
+  const normalizedEmail = email.toLowerCase().trim();
+
+  // Verify OTP first
+  const otpRecord = await OTP.findOne({ email: normalizedEmail, purpose: 'registration' });
+
+  if (!otpRecord) {
+    throw new BadRequestError('Invalid or expired OTP. Please request a new one.');
+  }
+
+  if (otpRecord.expiresAt < new Date()) {
+    await OTP.deleteOne({ _id: otpRecord._id });
+    throw new BadRequestError('OTP has expired. Please request a new one.');
+  }
+
+  const isValidOTP = await bcrypt.compare(otp, otpRecord.otp);
+  if (!isValidOTP) {
+    throw new BadRequestError('Invalid OTP');
+  }
+
+  // Delete the used OTP
+  await OTP.deleteOne({ _id: otpRecord._id });
+
+  // Check for existing user
+  const existing = await User.findOne({ $or: [{ phone }, { email: normalizedEmail }] });
   if (existing) {
     throw new BadRequestError('User already exists with provided phone/email');
   }
+
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({ phone, name, email, password: passwordHash, role: 'customer' });
+  const user = await User.create({ phone, name, email: normalizedEmail, password: passwordHash, role: 'customer' });
   const accessToken = generateAccessToken(user._id, user.role);
   const refreshToken = generateRefreshToken();
   await RefreshToken.create({
@@ -261,7 +411,7 @@ const sendPasswordResetOTP = async (identifier) => {
     // Determine if identifier is email or phone
     const isEmail = identifier.includes('@');
     const query = isEmail ? { email: identifier } : { phone: identifier };
-    
+
     // Find user with password field
     const user = await User.findOne(query).select('+password');
     if (!user) {
@@ -318,7 +468,7 @@ const resetPasswordWithOTP = async (identifier, otpCode, newPassword) => {
 
     // Find OTP record
     const otpRecord = await OTP.findOne(query);
-    
+
     if (!otpRecord) {
       throw new UnauthorizedError('Invalid or expired OTP');
     }
@@ -338,7 +488,7 @@ const resetPasswordWithOTP = async (identifier, otpCode, newPassword) => {
     // Find user
     const userQuery = isEmail ? { email: identifier } : { phone: identifier };
     const user = await User.findOne(userQuery).select('+password');
-    
+
     if (!user) {
       throw new UnauthorizedError('User not found');
     }
@@ -373,8 +523,11 @@ module.exports = {
   googleLogin,
   sendPhoneOTP,
   verifyPhoneOTP,
+  sendEmailLoginOTP,
+  verifyEmailLoginOTP,
   refreshAccessToken,
   logout,
+  sendRegistrationOTP,
   registerUser,
   getUserById,
   loginWithCredentials,
