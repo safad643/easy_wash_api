@@ -195,6 +195,63 @@ class ServiceService {
     if (!service) throw new NotFoundError('Service not found');
     return service;
   }
+
+  async getTopReviews(limit = 3) {
+    // Get top reviews across all services, sorted by rating (highest first)
+    const bookings = await Booking.find({
+      status: 'completed',
+      'feedback.rating': { $exists: true, $ne: null },
+      'feedback.comment': { $exists: true, $ne: null, $ne: '' }
+    })
+      .populate('userId', 'name email')
+      .sort({ 'feedback.rating': -1, 'feedback.submittedAt': -1 })
+      .limit(limit)
+      .lean();
+
+    return bookings.map(booking => ({
+      id: booking._id.toString(),
+      userName: booking.userId?.name || 'Anonymous',
+      rating: booking.feedback.rating,
+      comment: booking.feedback.comment,
+      serviceName: booking.serviceName,
+      createdAt: booking.feedback.submittedAt || booking.updatedAt,
+    }));
+  }
+
+  async getLandingPageStats() {
+    const User = require('../models/user.model');
+
+    // Get counts in parallel
+    const [customerCount, staffCount, avgRatingResult] = await Promise.all([
+      // Count all customers
+      User.countDocuments({ role: 'customer' }),
+      // Count all active staff
+      User.countDocuments({ role: 'staff', status: 'active' }),
+      // Get average rating across all service feedbacks
+      Booking.aggregate([
+        {
+          $match: {
+            status: 'completed',
+            'feedback.rating': { $exists: true, $ne: null }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            averageRating: { $avg: '$feedback.rating' }
+          }
+        }
+      ])
+    ]);
+
+    const averageRating = avgRatingResult[0]?.averageRating || 0;
+
+    return {
+      customerCount,
+      staffCount,
+      averageRating: Math.round(averageRating * 10) / 10 // Round to 1 decimal
+    };
+  }
 }
 
 module.exports = new ServiceService();

@@ -5,6 +5,8 @@ const { authenticate, authorize } = require('../middlewares/auth.middleware');
 
 // Public routes
 router.get('/', serviceController.getServices);
+router.get('/top-reviews', serviceController.getTopReviews);
+router.get('/landing-stats', serviceController.getLandingPageStats);
 router.get('/:id', serviceController.getServiceById);
 router.get('/:id/reviews', serviceController.getServiceReviews);
 

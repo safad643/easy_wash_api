@@ -55,11 +55,24 @@ const deleteService = async (req, res, next) => {
   res.json({ success: true, message: 'Service deleted successfully' });
 };
 
+const getTopReviews = async (req, res, next) => {
+  const limit = parseInt(req.query.limit) || 3;
+  const reviews = await serviceService.getTopReviews(limit);
+  res.json({ success: true, data: reviews });
+};
+
+const getLandingPageStats = async (req, res, next) => {
+  const stats = await serviceService.getLandingPageStats();
+  res.json({ success: true, data: stats });
+};
+
 module.exports = {
   createService,
   getServices,
   getServiceById,
   getServiceReviews,
+  getTopReviews,
+  getLandingPageStats,
   updateService,
   deleteService,
 };
