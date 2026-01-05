@@ -81,8 +81,7 @@ const sendPhoneOTP = async (phone) => {
 
     await OTP.deleteMany({ phone, purpose: 'verification' });
 
-    // const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpCode = '123456';
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
@@ -120,9 +119,8 @@ const sendEmailLoginOTP = async (email) => {
     // Delete existing verification OTPs for this email
     await OTP.deleteMany({ email: normalizedEmail, purpose: 'verification' });
 
-    // Generate OTP (use 123456 for dev, uncomment random for production)
-    // const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpCode = '123456';
+    // Generate random 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
@@ -298,9 +296,8 @@ const sendRegistrationOTP = async (email) => {
     // Delete existing registration OTPs for this email
     await OTP.deleteMany({ email: normalizedEmail, purpose: 'registration' });
 
-    // Generate OTP (use 123456 for dev, uncomment random for production)
-    // const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpCode = '123456';
+    // Generate random 6-digit OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
 
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
