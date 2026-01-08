@@ -34,24 +34,26 @@ class RefundController {
         }
 
         // --- Order refunds query ---
-        // Orders don't have refund.status, we check paymentStatus = 'refunded'
-        // For 'pending' status filter, we want cancelled orders that haven't been marked refunded yet
-        // For 'processed' status filter, we want orders with paymentStatus = 'refunded'
+        // Orders with paymentStatus = 'refunded' are processed refunds
+        // Orders that are cancelled but not yet refunded are pending
         let orderQuery = {};
         if (status === 'pending') {
+            // Cancelled orders that need refund processing
             orderQuery = {
-                status: 'cancelled',
-                paymentStatus: { $in: ['paid', 'pending'] }, // Cancelled but not yet refunded
+                status: { $in: ['cancelled', 'returned'] },
+                paymentStatus: { $in: ['paid', 'pending', 'processing'] },
             };
         } else if (status === 'processed') {
+            // Any order that has been refunded (regardless of order status)
             orderQuery = {
-                status: 'cancelled',
                 paymentStatus: 'refunded',
             };
         } else if (status === 'all') {
             orderQuery = {
-                status: 'cancelled',
-                paymentStatus: { $in: ['paid', 'pending', 'refunded'] },
+                $or: [
+                    { status: { $in: ['cancelled', 'returned'] }, paymentStatus: { $in: ['paid', 'pending', 'processing'] } },
+                    { paymentStatus: 'refunded' },
+                ],
             };
         }
 
@@ -262,22 +264,21 @@ class RefundController {
 
         // Order stats
         const orderPendingCount = await ProductOrder.countDocuments({
-            status: 'cancelled',
-            paymentStatus: { $in: ['paid', 'pending'] },
+            status: { $in: ['cancelled', 'returned'] },
+            paymentStatus: { $in: ['paid', 'pending', 'processing'] },
         });
 
         const orderProcessedCount = await ProductOrder.countDocuments({
-            status: 'cancelled',
             paymentStatus: 'refunded',
         });
 
         const orderPendingAmount = await ProductOrder.aggregate([
-            { $match: { status: 'cancelled', paymentStatus: { $in: ['paid', 'pending'] } } },
+            { $match: { status: { $in: ['cancelled', 'returned'] }, paymentStatus: { $in: ['paid', 'pending', 'processing'] } } },
             { $group: { _id: null, total: { $sum: '$totalAmount' } } },
         ]);
 
         const orderProcessedAmount = await ProductOrder.aggregate([
-            { $match: { status: 'cancelled', paymentStatus: 'refunded' } },
+            { $match: { paymentStatus: 'refunded' } },
             { $group: { _id: null, total: { $sum: '$totalAmount' } } },
         ]);
 
