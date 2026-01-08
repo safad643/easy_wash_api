@@ -121,7 +121,7 @@ class ProductOrderService {
     const productIds = items.map((item) => item.productId);
     const products = await Product.find({ _id: { $in: productIds } })
       .populate('category', 'isActive')
-      .select('name price image isAvailable category stock');
+      .select('name price image isAvailable category stock comingSoon');
 
     const productMap = new Map(products.map((product) => [String(product._id), product]));
 
@@ -132,6 +132,9 @@ class ProductOrderService {
       }
       if (!product.isAvailable || (product.category && !product.category.isActive)) {
         throw new BadRequestError(`${product.name} is not available right now`);
+      }
+      if (product.comingSoon) {
+        throw new BadRequestError(`${product.name} is coming soon and cannot be purchased yet`);
       }
       const quantity = Math.max(1, item.quantity || 1);
       if (product.stock < quantity) {
