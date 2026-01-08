@@ -1,8 +1,9 @@
 const Booking = require('../models/booking.model');
+const ProductOrder = require('../models/productOrder.model');
 const { NotFoundError, BadRequestError } = require('../utils/errors');
 
 class RefundController {
-    // List bookings with refund requests
+    // List bookings and orders with refunds
     async getRefunds(req, res) {
         const {
             status = 'pending',
@@ -12,45 +13,94 @@ class RefundController {
             limit = 10,
         } = req.query || {};
 
-        const query = {
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+
+        // --- Booking refunds query ---
+        const bookingQuery = {
             status: 'cancelled',
             'refund.status': { $in: status === 'all' ? ['pending', 'processed'] : [status] },
         };
 
-        // Filter by date range
         if (fromDate || toDate) {
-            query['refund.requestedAt'] = {};
+            bookingQuery['refund.requestedAt'] = {};
             if (fromDate) {
-                query['refund.requestedAt'].$gte = new Date(fromDate);
+                bookingQuery['refund.requestedAt'].$gte = new Date(fromDate);
             }
             if (toDate) {
                 const toDateEnd = new Date(toDate);
                 toDateEnd.setHours(23, 59, 59, 999);
-                query['refund.requestedAt'].$lte = toDateEnd;
+                bookingQuery['refund.requestedAt'].$lte = toDateEnd;
             }
         }
 
-        const skip = (parseInt(page) - 1) * parseInt(limit);
-        const total = await Booking.countDocuments(query);
+        // --- Order refunds query ---
+        // Orders don't have refund.status, we check paymentStatus = 'refunded'
+        // For 'pending' status filter, we want cancelled orders that haven't been marked refunded yet
+        // For 'processed' status filter, we want orders with paymentStatus = 'refunded'
+        let orderQuery = {};
+        if (status === 'pending') {
+            orderQuery = {
+                status: 'cancelled',
+                paymentStatus: { $in: ['paid', 'pending'] }, // Cancelled but not yet refunded
+            };
+        } else if (status === 'processed') {
+            orderQuery = {
+                status: 'cancelled',
+                paymentStatus: 'refunded',
+            };
+        } else if (status === 'all') {
+            orderQuery = {
+                status: 'cancelled',
+                paymentStatus: { $in: ['paid', 'pending', 'refunded'] },
+            };
+        }
 
-        const bookings = await Booking.find(query)
+        if (fromDate || toDate) {
+            orderQuery.updatedAt = {};
+            if (fromDate) {
+                orderQuery.updatedAt.$gte = new Date(fromDate);
+            }
+            if (toDate) {
+                const toDateEnd = new Date(toDate);
+                toDateEnd.setHours(23, 59, 59, 999);
+                orderQuery.updatedAt.$lte = toDateEnd;
+            }
+        }
+
+        // Get counts
+        const bookingCount = await Booking.countDocuments(bookingQuery);
+        const orderCount = await ProductOrder.countDocuments(orderQuery);
+        const total = bookingCount + orderCount;
+
+        // Fetch bookings
+        const bookings = await Booking.find(bookingQuery)
             .populate({
                 path: 'userId',
                 select: 'name email phone',
                 options: { lean: true }
             })
             .sort({ 'refund.requestedAt': -1 })
-            .skip(skip)
-            .limit(parseInt(limit))
             .lean()
             .exec();
 
-        const formattedRefunds = bookings.map((booking) => {
-            const customerName = booking.userId?.name || booking.userId?.email?.split('@')[0] || 'Unknown';
+        // Fetch orders
+        const orders = await ProductOrder.find(orderQuery)
+            .populate({
+                path: 'userId',
+                select: 'name email phone',
+                options: { lean: true }
+            })
+            .sort({ updatedAt: -1 })
+            .lean()
+            .exec();
 
+        // Format booking refunds
+        const formattedBookings = bookings.map((booking) => {
+            const customerName = booking.userId?.name || booking.userId?.email?.split('@')[0] || 'Unknown';
             return {
                 id: booking._id.toString(),
                 bookingId: booking._id.toString(),
+                type: 'booking',
                 customer: {
                     name: customerName,
                     email: booking.userId?.email || '',
@@ -71,10 +121,46 @@ class RefundController {
             };
         });
 
+        // Format order refunds
+        const formattedOrders = orders.map((order) => {
+            const customerName = order.userId?.name || order.userId?.email?.split('@')[0] || 'Unknown';
+            const isProcessed = order.paymentStatus === 'refunded';
+            return {
+                id: order._id.toString(),
+                bookingId: order._id.toString(), // Use same field for consistency
+                orderId: order.orderNumber,
+                type: 'order',
+                customer: {
+                    name: customerName,
+                    email: order.userId?.email || '',
+                    phone: order.userId?.phone || '',
+                },
+                service: `Order ${order.orderNumber}`,
+                amount: order.totalAmount || 0,
+                refund: {
+                    eligible: true,
+                    amount: order.totalAmount || 0,
+                    reason: 'Order cancelled',
+                    status: isProcessed ? 'processed' : 'pending',
+                    requestedAt: order.updatedAt,
+                    processedAt: isProcessed ? order.updatedAt : null,
+                },
+                cancelledAt: order.updatedAt,
+                createdAt: order.createdAt,
+            };
+        });
+
+        // Combine and sort by date
+        const allRefunds = [...formattedBookings, ...formattedOrders]
+            .sort((a, b) => new Date(b.cancelledAt) - new Date(a.cancelledAt));
+
+        // Apply pagination
+        const paginatedRefunds = allRefunds.slice(skip, skip + parseInt(limit));
+
         res.json({
             success: true,
             data: {
-                data: formattedRefunds,
+                data: paginatedRefunds,
                 total,
                 page: parseInt(page),
                 limit: parseInt(limit),
@@ -87,74 +173,124 @@ class RefundController {
     async markRefunded(req, res) {
         const { id } = req.params;
 
-        const booking = await Booking.findById(id);
-        if (!booking) {
-            throw new NotFoundError('Booking not found');
-        }
+        // Try to find as booking first
+        let booking = await Booking.findById(id);
+        if (booking) {
+            if (booking.status !== 'cancelled') {
+                throw new BadRequestError('Only cancelled bookings can have refunds processed');
+            }
+            if (!booking.refund?.eligible) {
+                throw new BadRequestError('This booking is not eligible for refund');
+            }
+            if (booking.refund?.status === 'processed') {
+                throw new BadRequestError('Refund has already been processed');
+            }
 
-        if (booking.status !== 'cancelled') {
-            throw new BadRequestError('Only cancelled bookings can have refunds processed');
-        }
+            booking.refund.status = 'processed';
+            booking.refund.processedAt = new Date();
+            booking.paymentStatus = 'refunded';
+            await booking.save();
 
-        if (!booking.refund?.eligible) {
-            throw new BadRequestError('This booking is not eligible for refund');
-        }
-
-        if (booking.refund?.status === 'processed') {
-            throw new BadRequestError('Refund has already been processed');
-        }
-
-        booking.refund.status = 'processed';
-        booking.refund.processedAt = new Date();
-        booking.paymentStatus = 'refunded';
-        await booking.save();
-
-        res.json({
-            success: true,
-            data: {
-                id: booking._id.toString(),
-                message: 'Refund marked as processed',
-                refund: {
-                    amount: booking.refund.amount,
-                    status: booking.refund.status,
-                    processedAt: booking.refund.processedAt,
+            return res.json({
+                success: true,
+                data: {
+                    id: booking._id.toString(),
+                    type: 'booking',
+                    message: 'Refund marked as processed',
+                    refund: {
+                        amount: booking.refund.amount,
+                        status: booking.refund.status,
+                        processedAt: booking.refund.processedAt,
+                    },
                 },
-            },
-        });
+            });
+        }
+
+        // Try to find as order
+        let order = await ProductOrder.findById(id);
+        if (order) {
+            if (order.status !== 'cancelled') {
+                throw new BadRequestError('Only cancelled orders can have refunds processed');
+            }
+            if (order.paymentStatus === 'refunded') {
+                throw new BadRequestError('Refund has already been processed');
+            }
+
+            order.paymentStatus = 'refunded';
+            await order.save();
+
+            return res.json({
+                success: true,
+                data: {
+                    id: order._id.toString(),
+                    type: 'order',
+                    message: 'Refund marked as processed',
+                    refund: {
+                        amount: order.totalAmount,
+                        status: 'processed',
+                        processedAt: new Date(),
+                    },
+                },
+            });
+        }
+
+        throw new NotFoundError('Booking or Order not found');
     }
 
     // Get refund stats for dashboard
     async getRefundStats(req, res) {
-        const pendingCount = await Booking.countDocuments({
+        // Booking stats
+        const bookingPendingCount = await Booking.countDocuments({
             status: 'cancelled',
             'refund.status': 'pending',
         });
 
-        const processedCount = await Booking.countDocuments({
+        const bookingProcessedCount = await Booking.countDocuments({
             status: 'cancelled',
             'refund.status': 'processed',
         });
 
-        const pendingAmount = await Booking.aggregate([
+        const bookingPendingAmount = await Booking.aggregate([
             { $match: { status: 'cancelled', 'refund.status': 'pending' } },
             { $group: { _id: null, total: { $sum: '$refund.amount' } } },
         ]);
 
-        const processedAmount = await Booking.aggregate([
+        const bookingProcessedAmount = await Booking.aggregate([
             { $match: { status: 'cancelled', 'refund.status': 'processed' } },
             { $group: { _id: null, total: { $sum: '$refund.amount' } } },
+        ]);
+
+        // Order stats
+        const orderPendingCount = await ProductOrder.countDocuments({
+            status: 'cancelled',
+            paymentStatus: { $in: ['paid', 'pending'] },
+        });
+
+        const orderProcessedCount = await ProductOrder.countDocuments({
+            status: 'cancelled',
+            paymentStatus: 'refunded',
+        });
+
+        const orderPendingAmount = await ProductOrder.aggregate([
+            { $match: { status: 'cancelled', paymentStatus: { $in: ['paid', 'pending'] } } },
+            { $group: { _id: null, total: { $sum: '$totalAmount' } } },
+        ]);
+
+        const orderProcessedAmount = await ProductOrder.aggregate([
+            { $match: { status: 'cancelled', paymentStatus: 'refunded' } },
+            { $group: { _id: null, total: { $sum: '$totalAmount' } } },
         ]);
 
         res.json({
             success: true,
             data: {
                 pending: {
-                    count: pendingCount,
-                    amount: pendingAmount[0]?.total || 0,
+                    count: bookingPendingCount + orderPendingCount,
+                    amount: (bookingPendingAmount[0]?.total || 0) + (orderPendingAmount[0]?.total || 0),
                 },
                 processed: {
-                    count: processedCount,
-                    amount: processedAmount[0]?.total || 0,
+                    count: bookingProcessedCount + orderProcessedCount,
+                    amount: (bookingProcessedAmount[0]?.total || 0) + (orderProcessedAmount[0]?.total || 0),
                 },
             },
         });
