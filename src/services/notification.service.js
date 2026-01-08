@@ -1,6 +1,7 @@
 const webpush = require('web-push');
 const Notification = require('../models/notification.model');
 const PushSubscription = require('../models/pushSubscription.model');
+const User = require('../models/user.model');
 
 // Configure web-push with VAPID keys
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -158,6 +159,23 @@ async function markAllAsRead(userId) {
     );
 }
 
+/**
+ * Notify all admin users
+ */
+async function notifyAdmins({ title, message, type = 'system', data = {}, actionUrl }) {
+    try {
+        const admins = await User.find({ role: 'admin', status: 'active' }).select('_id').lean();
+
+        const notificationPromises = admins.map(admin =>
+            createNotification(admin._id, { title, message, type, data, actionUrl })
+        );
+
+        await Promise.allSettled(notificationPromises);
+    } catch (error) {
+        console.error('Failed to notify admins:', error.message);
+    }
+}
+
 module.exports = {
     createNotification,
     sendPushToUser,
@@ -165,5 +183,6 @@ module.exports = {
     removeSubscription,
     getNotifications,
     markAsRead,
-    markAllAsRead
+    markAllAsRead,
+    notifyAdmins
 };

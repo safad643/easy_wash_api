@@ -70,6 +70,18 @@ class ComplaintService {
             status: 'pending',
         });
 
+        // Notify admins about new complaint
+        try {
+            await notificationService.notifyAdmins({
+                title: 'New Complaint Received',
+                message: `A new ${category} complaint has been filed for a ${referenceType}.`,
+                type: 'complaint',
+                actionUrl: `/admin/complaints/${complaint._id}`
+            });
+        } catch (err) {
+            console.error('Failed to notify admins about complaint:', err.message);
+        }
+
         return this._formatComplaint(complaint);
     }
 

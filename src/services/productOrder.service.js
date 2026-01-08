@@ -278,6 +278,18 @@ class ProductOrderService {
       console.error('Failed to send order confirmation notification:', err.message);
     }
 
+    // Notify admins about new order
+    try {
+      await notificationService.notifyAdmins({
+        title: 'New Order Received',
+        message: `Order #${order.orderNumber} placed for ₹${order.totalAmount}.`,
+        type: 'order',
+        actionUrl: `/admin/orders/${order._id}`
+      });
+    } catch (err) {
+      console.error('Failed to notify admins about new order:', err.message);
+    }
+
     return order;
   }
 

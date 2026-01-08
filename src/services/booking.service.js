@@ -4,6 +4,7 @@ const Vehicle = require('../models/vehicle.model');
 const Slot = require('../models/slot.model');
 const Addon = require('../models/addon.model');
 const { BadRequestError, NotFoundError } = require('../utils/errors');
+const notificationService = require('./notification.service');
 
 class BookingService {
   async previewPricing({ serviceId, vehicleId, addOns = [], paymentType = 'full' }) {
@@ -333,6 +334,18 @@ class BookingService {
 
     // DO NOT mark slot as booked here - only mark it after successful payment
     // This prevents slots from being locked if payment fails
+
+    // Notify admins about new service request
+    try {
+      await notificationService.notifyAdmins({
+        title: 'New Service Request',
+        message: `New booking for ${input.serviceName || 'service'} on ${scheduledAt.toLocaleDateString()}.`,
+        type: 'booking',
+        actionUrl: `/admin/requests/${booking._id}`
+      });
+    } catch (err) {
+      console.error('Failed to notify admins about new booking:', err.message);
+    }
 
     return booking;
   }
