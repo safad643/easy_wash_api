@@ -4,8 +4,6 @@ const authController = require('../controllers/auth.controller');
 const { authenticate } = require('../middlewares/auth.middleware');
 
 router.post('/google', authController.googleAuth);
-router.post('/phone/send-otp', authController.sendOTP);
-router.post('/phone/verify', authController.verifyOTP);
 router.post('/email/send-otp', authController.sendEmailOTP);
 router.post('/email/verify', authController.verifyEmailOTP);
 router.post('/login', authController.login);

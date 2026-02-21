@@ -51,21 +51,6 @@ const googleAuth = async (req, res, next) => {
   });
 };
 
-const sendOTP = async (req, res, next) => {
-  const { phone } = req.body;
-
-  if (!phone) {
-    throw new BadRequestError('Phone number is required');
-  }
-
-  const result = await authService.sendPhoneOTP(phone);
-
-  res.json({
-    success: true,
-    message: result.message
-  });
-};
-
 const sendEmailOTP = async (req, res, next) => {
   const { email } = req.body;
 
@@ -78,32 +63,6 @@ const sendEmailOTP = async (req, res, next) => {
   res.json({
     success: true,
     message: result.message
-  });
-};
-
-const verifyOTP = async (req, res, next) => {
-
-  const { phone, otp } = req.body;
-  if (!phone || !otp) {
-    throw new BadRequestError('Phone and OTP are required');
-  }
-
-  const { accessToken, refreshToken, user } = await authService.verifyPhoneOTP(phone, otp);
-
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
-
-  res.json({
-    success: true,
-    data: {
-      token: accessToken,
-      user
-    }
   });
 };
 
@@ -222,7 +181,7 @@ const sendPasswordResetOTP = async (req, res, next) => {
   const { identifier } = req.body;
 
   if (!identifier) {
-    throw new BadRequestError('Email or phone number is required');
+    throw new BadRequestError('Email is required');
   }
 
   const result = await authService.sendPasswordResetOTP(identifier);
@@ -237,7 +196,7 @@ const resetPassword = async (req, res, next) => {
   const { identifier, otp, newPassword } = req.body;
 
   if (!identifier || !otp || !newPassword) {
-    throw new BadRequestError('Email/phone, OTP, and new password are required');
+    throw new BadRequestError('Email, OTP, and new password are required');
   }
 
   const result = await authService.resetPasswordWithOTP(identifier, otp, newPassword);
@@ -250,8 +209,6 @@ const resetPassword = async (req, res, next) => {
 
 module.exports = {
   googleAuth,
-  sendOTP,
-  verifyOTP,
   sendEmailOTP,
   verifyEmailOTP,
   refresh,

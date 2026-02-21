@@ -4,7 +4,6 @@ const RefreshToken = require('../models/refreshToken.model');
 const OTP = require('../models/otp.model');
 const googleService = require('./google.service');
 const { generateAccessToken, generateRefreshToken } = require('../utils/jwt.util');
-const { sendOTP } = require('../utils/sms.util');
 const { sendOTP: sendEmailOTP } = require('../utils/email.util');
 const { UnauthorizedError, BadRequestError } = require('../utils/errors');
 
@@ -73,33 +72,6 @@ const googleLogin = async (authCode) => {
   }
 };
 
-const sendPhoneOTP = async (phone) => {
-  try {
-    if (!phone || !/^\+?[1-9]\d{1,14}$/.test(phone)) {
-      throw new BadRequestError('Invalid phone number format');
-    }
-
-    await OTP.deleteMany({ phone, purpose: 'verification' });
-
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    const hashedOTP = await bcrypt.hash(otpCode, 10);
-
-    await OTP.create({
-      phone,
-      otp: hashedOTP,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      purpose: 'verification'
-    });
-
-    await sendOTP(phone, otpCode);
-
-    return { message: 'OTP sent successfully' };
-  } catch (error) {
-    if (error.isOperational) throw error;
-    throw new Error(`Failed to send OTP: ${error.message}`);
-  }
-};
 
 // Send OTP to email for login (requires existing account)
 const sendEmailLoginOTP = async (email) => {
@@ -182,47 +154,6 @@ const verifyEmailLoginOTP = async (email, otpCode) => {
   } catch (error) {
     if (error.isOperational) throw error;
     throw new Error(`Email OTP verification failed: ${error.message}`);
-  }
-};
-
-const verifyPhoneOTP = async (phone, otpCode) => {
-  try {
-    const otpRecord = await OTP.findOne({ phone, purpose: 'verification' });
-
-    if (!otpRecord) {
-      throw new UnauthorizedError('Invalid or expired OTP');
-    }
-
-    if (otpRecord.expiresAt < new Date()) {
-      await OTP.deleteOne({ _id: otpRecord._id });
-      throw new UnauthorizedError('OTP has expired');
-    }
-
-    const isValid = await bcrypt.compare(otpCode, otpRecord.otp);
-    if (!isValid) {
-      throw new UnauthorizedError('Invalid OTP');
-    }
-
-    await OTP.deleteOne({ _id: otpRecord._id });
-
-    let user = await User.findOne({ phone });
-    if (!user) {
-      user = await User.create({ phone });
-    }
-
-    const accessToken = generateAccessToken(user._id, user.role);
-    const refreshToken = generateRefreshToken();
-
-    await RefreshToken.create({
-      userId: user._id,
-      token: await bcrypt.hash(refreshToken, 10),
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    });
-
-    return { accessToken, refreshToken, user };
-  } catch (error) {
-    if (error.isOperational) throw error;
-    throw new Error(`OTP verification failed: ${error.message}`);
   }
 };
 
@@ -399,93 +330,67 @@ const changePassword = async (userId, currentPassword, newPassword) => {
   return { message: 'Password changed successfully' };
 };
 
-const sendPasswordResetOTP = async (identifier) => {
+const sendPasswordResetOTP = async (email) => {
   try {
-    if (!identifier) {
-      throw new BadRequestError('Email or phone number is required');
+    if (!email || !email.includes('@')) {
+      throw new BadRequestError('Valid email is required for password reset');
     }
 
-    // Determine if identifier is email or phone
-    const isEmail = identifier.includes('@');
-    const query = isEmail ? { email: identifier } : { phone: identifier };
-
-    // Find user with password field
-    const user = await User.findOne(query).select('+password');
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
-      // Explicitly inform that account does not exist
       throw new BadRequestError('Account not found');
     }
 
-    // Check if user has a password set
     if (!user.password) {
       throw new BadRequestError('Password not set for this account. Please use alternative login method.');
     }
 
-    // Delete existing password reset OTPs
-    const deleteQuery = isEmail ? { email: identifier, purpose: 'password-reset' } : { phone: identifier, purpose: 'password-reset' };
-    await OTP.deleteMany(deleteQuery);
+    await OTP.deleteMany({ email: normalizedEmail, purpose: 'password-reset' });
 
-    // Generate OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // Create OTP record
-    const otpData = {
+    await OTP.create({
+      email: normalizedEmail,
       otp: hashedOTP,
-      expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       purpose: 'password-reset'
-    };
+    });
 
-    if (isEmail) {
-      otpData.email = identifier;
-      await OTP.create(otpData);
-      await sendEmailOTP(identifier, otpCode);
-    } else {
-      otpData.phone = identifier;
-      await OTP.create(otpData);
-      await sendOTP(identifier, otpCode);
-    }
+    await sendEmailOTP(normalizedEmail, otpCode);
 
-    return { message: 'If an account exists with this email/phone, an OTP has been sent' };
+    return { message: 'If an account exists with this email, an OTP has been sent' };
   } catch (error) {
     if (error.isOperational) throw error;
     throw new Error(`Failed to send password reset OTP: ${error.message}`);
   }
 };
 
-const resetPasswordWithOTP = async (identifier, otpCode, newPassword) => {
+const resetPasswordWithOTP = async (email, otpCode, newPassword) => {
   try {
-    if (!identifier || !otpCode || !newPassword) {
-      throw new BadRequestError('Email/phone, OTP, and new password are required');
+    if (!email || !email.includes('@') || !otpCode || !newPassword) {
+      throw new BadRequestError('Email, OTP, and new password are required');
     }
 
-    // Determine if identifier is email or phone
-    const isEmail = identifier.includes('@');
-    const query = isEmail ? { email: identifier, purpose: 'password-reset' } : { phone: identifier, purpose: 'password-reset' };
-
-    // Find OTP record
-    const otpRecord = await OTP.findOne(query);
+    const normalizedEmail = email.toLowerCase().trim();
+    const otpRecord = await OTP.findOne({ email: normalizedEmail, purpose: 'password-reset' });
 
     if (!otpRecord) {
       throw new UnauthorizedError('Invalid or expired OTP');
     }
 
-    // Check if OTP has expired
     if (otpRecord.expiresAt < new Date()) {
       await OTP.deleteOne({ _id: otpRecord._id });
       throw new UnauthorizedError('OTP has expired');
     }
 
-    // Verify OTP
     const isValid = await bcrypt.compare(otpCode, otpRecord.otp);
     if (!isValid) {
       throw new UnauthorizedError('Invalid OTP');
     }
 
-    // Find user
-    const userQuery = isEmail ? { email: identifier } : { phone: identifier };
-    const user = await User.findOne(userQuery).select('+password');
-
+    const user = await User.findOne({ email: normalizedEmail }).select('+password');
     if (!user) {
       throw new UnauthorizedError('User not found');
     }
@@ -494,19 +399,16 @@ const resetPasswordWithOTP = async (identifier, otpCode, newPassword) => {
       throw new BadRequestError('Password not set for this account');
     }
 
-    // Check if new password is different from current password
     const isSamePassword = await bcrypt.compare(newPassword, user.password);
     if (isSamePassword) {
       await OTP.deleteOne({ _id: otpRecord._id });
       throw new BadRequestError('New password must be different from current password');
     }
 
-    // Update password
     const passwordHash = await bcrypt.hash(newPassword, 10);
     user.password = passwordHash;
     await user.save();
 
-    // Delete used OTP
     await OTP.deleteOne({ _id: otpRecord._id });
 
     return { message: 'Password reset successfully' };
@@ -518,8 +420,6 @@ const resetPasswordWithOTP = async (identifier, otpCode, newPassword) => {
 
 module.exports = {
   googleLogin,
-  sendPhoneOTP,
-  verifyPhoneOTP,
   sendEmailLoginOTP,
   verifyEmailLoginOTP,
   refreshAccessToken,
