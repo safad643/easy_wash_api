@@ -27,6 +27,7 @@ const addonRoutes = require('./routes/addon.routes');
 const complaintRoutes = require('./routes/complaint.routes');
 const refundRoutes = require('./routes/refund.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const loginLogRoutes = require('./routes/loginLog.routes');
 const errorHandler = require('./middlewares/error.middleware');
 const cors = require('cors');
 
@@ -79,6 +80,7 @@ app.use('/api/complaints', complaintRoutes.customerRouter);
 app.use('/api/admin/complaints', complaintRoutes.adminRouter);
 app.use('/api/admin/refunds', refundRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/admin/login-logs', loginLogRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

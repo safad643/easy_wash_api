@@ -1,4 +1,5 @@
 const authService = require('../services/auth.service');
+const { logLoginAttempt } = require('../services/loginLog.service');
 const { BadRequestError } = require('../utils/errors');
 
 const login = async (req, res, next) => {
@@ -6,24 +7,42 @@ const login = async (req, res, next) => {
   if (!identifier || !password) {
     throw new BadRequestError('Identifier and password are required');
   }
+  try {
+    const { accessToken, refreshToken, user } = await authService.loginWithCredentials({ identifier, password });
 
-  const { accessToken, refreshToken, user } = await authService.loginWithCredentials({ identifier, password });
+    await logLoginAttempt({
+      req,
+      identifier,
+      method: 'credentials',
+      user,
+      success: true
+    });
 
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
 
-  res.json({
-    success: true,
-    data: {
-      token: accessToken,
-      user
-    }
-  });
+    res.json({
+      success: true,
+      data: {
+        token: accessToken,
+        user
+      }
+    });
+  } catch (error) {
+    await logLoginAttempt({
+      req,
+      identifier,
+      method: 'credentials',
+      success: false,
+      error
+    });
+    next(error);
+  }
 };
 
 const googleAuth = async (req, res, next) => {
@@ -31,24 +50,42 @@ const googleAuth = async (req, res, next) => {
   if (!code) {
     throw new BadRequestError('Authorization code is required');
   }
+  try {
+    const { accessToken, refreshToken, user } = await authService.googleLogin(code);
 
-  const { accessToken, refreshToken, user } = await authService.googleLogin(code);
+    await logLoginAttempt({
+      req,
+      identifier: user && (user.email || user.googleId),
+      method: 'google',
+      user,
+      success: true
+    });
 
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
 
-  res.json({
-    success: true,
-    data: {
-      token: accessToken,
-      user
-    }
-  });
+    res.json({
+      success: true,
+      data: {
+        token: accessToken,
+        user
+      }
+    });
+  } catch (error) {
+    await logLoginAttempt({
+      req,
+      identifier: null,
+      method: 'google',
+      success: false,
+      error
+    });
+    next(error);
+  }
 };
 
 const sendEmailOTP = async (req, res, next) => {
@@ -72,24 +109,42 @@ const verifyEmailOTP = async (req, res, next) => {
   if (!email || !otp) {
     throw new BadRequestError('Email and OTP are required');
   }
+  try {
+    const { accessToken, refreshToken, user } = await authService.verifyEmailLoginOTP(email, otp);
 
-  const { accessToken, refreshToken, user } = await authService.verifyEmailLoginOTP(email, otp);
+    await logLoginAttempt({
+      req,
+      identifier: email.toLowerCase().trim(),
+      method: 'email-otp',
+      user,
+      success: true
+    });
 
-  res.cookie('refreshToken', refreshToken, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000
-  });
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
 
-  res.json({
-    success: true,
-    data: {
-      token: accessToken,
-      user
-    }
-  });
+    res.json({
+      success: true,
+      data: {
+        token: accessToken,
+        user
+      }
+    });
+  } catch (error) {
+    await logLoginAttempt({
+      req,
+      identifier: email && email.toLowerCase().trim(),
+      method: 'email-otp',
+      success: false,
+      error
+    });
+    next(error);
+  }
 };
 
 const refresh = async (req, res, next) => {
