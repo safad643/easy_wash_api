@@ -178,13 +178,13 @@ const getMe = async (req, res, next) => {
 };
 
 const sendPasswordResetOTP = async (req, res, next) => {
-  const { identifier } = req.body;
+  const { email } = req.body;
 
-  if (!identifier) {
+  if (!email) {
     throw new BadRequestError('Email is required');
   }
 
-  const result = await authService.sendPasswordResetOTP(identifier);
+  const result = await authService.sendPasswordResetOTP(email);
 
   res.json({
     success: true,
@@ -193,13 +193,13 @@ const sendPasswordResetOTP = async (req, res, next) => {
 };
 
 const resetPassword = async (req, res, next) => {
-  const { identifier, otp, newPassword } = req.body;
+  const { email, otp, newPassword } = req.body;
 
-  if (!identifier || !otp || !newPassword) {
+  if (!email || !otp || !newPassword) {
     throw new BadRequestError('Email, OTP, and new password are required');
   }
 
-  const result = await authService.resetPasswordWithOTP(identifier, otp, newPassword);
+  const result = await authService.resetPasswordWithOTP(email, otp, newPassword);
 
   res.json({
     success: true,

@@ -1,12 +1,9 @@
 const mongoose = require('mongoose');
 
 const otpSchema = new mongoose.Schema({
-  phone: {
-    type: String,
-    sparse: true
-  },
   email: {
     type: String,
+    required: true,
     sparse: true,
     lowercase: true,
     trim: true
@@ -26,15 +23,6 @@ const otpSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
-});
-
-// Validate that at least one of phone or email is provided
-otpSchema.pre('validate', function (next) {
-  if (!this.phone && !this.email) {
-    next(new Error('Either phone or email must be provided'));
-  } else {
-    next();
-  }
 });
 
 // TTL index - auto-delete expired OTPs

@@ -30,7 +30,8 @@ const errorHandler = (err, req, res, next) => {
     message = 'Token expired';
   }
 
-  if (!err.isOperational || config.env === 'development') {
+  // Only log unexpected (non-operational) errors — skip expected auth/validation failures
+  if (!err.isOperational) {
     console.error('Error:', err);
   }
 
